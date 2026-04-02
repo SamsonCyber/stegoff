@@ -1,0 +1,60 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "stegoff"
+version = "0.3.0"
+description = "Steganography detection, sanitization & prompt injection guard for AI systems"
+readme = "README.md"
+requires-python = ">=3.10"
+license = {text = "MIT"}
+authors = [{name = "SamsonCyber"}]
+keywords = ["steganography", "detection", "security", "prompt-injection", "ai-safety", "llm"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Information Technology",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Security",
+    "Topic :: Scientific/Engineering :: Image Processing",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Typing :: Typed",
+]
+dependencies = []
+
+[project.optional-dependencies]
+image = ["numpy>=1.24", "Pillow>=10.0"]
+full = ["numpy>=1.24", "Pillow>=10.0", "scipy>=1.10"]
+server = ["fastapi>=0.100", "uvicorn[standard]>=0.20", "python-multipart>=0.0.6"]
+llm = ["anthropic>=0.30"]
+dev = [
+    "pytest>=7.0",
+    "httpx>=0.24",
+    "numpy>=1.24",
+    "Pillow>=10.0",
+    "scipy>=1.10",
+    "fastapi>=0.100",
+    "python-multipart>=0.0.6",
+    "anthropic>=0.30",
+]
+
+[project.scripts]
+stegoff = "stegoff.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/solosec/stegoff"
+Documentation = "https://github.com/solosec/stegoff#readme"
+Repository = "https://github.com/solosec/stegoff"
+Issues = "https://github.com/solosec/stegoff/issues"
+
+[tool.setuptools.packages.find]
+include = ["stegoff*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
