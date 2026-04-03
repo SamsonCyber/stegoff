@@ -50,6 +50,8 @@ class StegMethod(Enum):
     HTML_ENTITY = "html_entity_encoding"
     MULTI_ENCODING = "multi_layer_encoding"
     INTERLINEAR = "interlinear_annotation"
+    # Anomalous Unicode
+    ANOMALOUS_UNICODE = "anomalous_unicode_blocks"
     # Prompt injection
     PROMPT_INJECTION = "prompt_injection_payload"
 
