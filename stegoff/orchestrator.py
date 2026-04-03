@@ -17,7 +17,7 @@ from stegoff.detectors.text import scan_text_all
 from stegoff.detectors.image import scan_image
 from stegoff.detectors.binary import scan_binary
 from stegoff.detectors.audio import scan_audio
-from stegoff.detectors.prompt_injection import scan_payload_for_injection
+from stegoff.detectors.prompt_injection import scan_payload_for_injection, scan_raw_text_for_injection
 from stegoff.detectors.llm import detect_semantic_steg
 
 
@@ -144,6 +144,13 @@ def scan_text(text: str, source: str = "<text>", use_llm: bool = False,
     for f in _scan_comment_steg(text, source):
         report.add(f)
     for f in _scan_encoded_content(text, source):
+        report.add(f)
+
+    # Direct prompt injection scan on raw text (catches leetspeak,
+    # synonym substitution, and other obfuscated injections).
+    # Uses the safe subset of patterns that won't false-positive on normal text.
+    injection_hits = scan_raw_text_for_injection(text, source="raw_text")
+    for f in injection_hits:
         report.add(f)
 
     # LLM semantic analysis (opt-in, catches synonym/structure encoding)

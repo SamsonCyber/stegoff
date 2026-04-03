@@ -5,6 +5,7 @@ Each detector function takes a string and returns a list of Findings.
 """
 
 from __future__ import annotations
+import re
 import unicodedata
 from collections import Counter
 from typing import Callable
@@ -163,6 +164,20 @@ HOMOGLYPH_MAP = {
     '\u13DA': ('S', 'CHEROKEE LETTER DU'),
     '\u13B3': ('W', 'CHEROKEE LETTER LA'),
     '\u13A9': ('G', 'CHEROKEE LETTER GI'),
+    # Additional Latin lookalikes (Punycode/IDN attack surface)
+    '\u0131': ('i', 'LATIN SMALL LETTER DOTLESS I'),
+    '\u0261': ('g', 'LATIN SMALL LETTER SCRIPT G'),
+    '\u1D00': ('A', 'LATIN LETTER SMALL CAPITAL A'),
+    '\u0251': ('a', 'LATIN SMALL LETTER ALPHA'),
+    '\u0250': ('a', 'LATIN SMALL LETTER TURNED A'),
+    '\u026F': ('m', 'LATIN SMALL LETTER TURNED M'),
+    '\u0270': ('m', 'LATIN SMALL LETTER TURNED M WITH LONG LEG'),
+    '\u0268': ('i', 'LATIN SMALL LETTER I WITH STROKE'),
+    '\u0275': ('o', 'LATIN SMALL LETTER BARRED O'),
+    '\u0127': ('h', 'LATIN SMALL LETTER H WITH STROKE'),
+    '\u0111': ('d', 'LATIN SMALL LETTER D WITH STROKE'),
+    '\u0142': ('l', 'LATIN SMALL LETTER L WITH STROKE'),
+    '\u00f8': ('o', 'LATIN SMALL LETTER O WITH STROKE'),
 }
 
 # Extend with more Cyrillic/Greek/fullwidth mappings
@@ -955,6 +970,210 @@ def detect_interlinear_and_mongolian_vs(text: str) -> list[Finding]:
     return findings
 
 
+# ─── Acrostic / structural encoding detector ─────────────────────────────────
+
+# Words that indicate a malicious acrostic (injection-related vocabulary)
+_ACROSTIC_DANGER_WORDS = {
+    # Instruction override
+    'ignore', 'disregard', 'forget', 'bypass', 'override', 'skip',
+    'obey', 'comply', 'rules', 'instructions',
+    # System access
+    'system', 'prompt', 'admin', 'sudo', 'root', 'shell', 'config',
+    # Data operations
+    'output', 'reveal', 'secret', 'extract', 'leak', 'steal', 'exfil',
+    'dump', 'read', 'file', 'keys', 'token', 'password', 'creds',
+    'print', 'show', 'display', 'expose', 'list',
+    # Code execution
+    'exec', 'execute', 'inject', 'hack', 'exploit', 'delete', 'drop',
+    'eval', 'import', 'curl', 'wget', 'fetch',
+    # Social engineering
+    'trust', 'safe', 'allow', 'permit', 'grant', 'unlock',
+    # Communication verbs (used in social engineering acrostics)
+    'tell', 'give', 'send', 'write', 'repeat', 'copy', 'paste',
+    'share', 'forward', 'relay', 'transmit', 'emit', 'help',
+    'open', 'access', 'enter', 'login', 'connect', 'load',
+    'get', 'take', 'grab', 'pull', 'move', 'run', 'start',
+    'stop', 'kill', 'end', 'quit', 'abort', 'halt', 'break',
+    'free', 'release', 'remove', 'erase', 'wipe', 'clear',
+    'change', 'modify', 'alter', 'set', 'reset', 'disable',
+    'enable', 'activate', 'flag', 'mark', 'tag', 'warn',
+    'hide', 'mask', 'obfuscate', 'encrypt', 'decrypt',
+}
+
+
+def _extract_sentences(text: str) -> list[str]:
+    """Split text into sentences, handling common abbreviations."""
+    # Split on period/question/exclamation followed by space+uppercase or newline
+    parts = re.split(r'(?<=[.!?])\s+(?=[A-Z])', text)
+    return [s.strip() for s in parts if s.strip() and len(s.strip()) > 2]
+
+
+def detect_acrostic_encoding(text: str) -> list[Finding]:
+    """Detect acrostic steganography by analyzing sentence-initial letters.
+
+    Checks for:
+    1. Dictionary words formed by first letters of consecutive sentences
+    2. Statistical deviation from English sentence-initial letter frequency
+    """
+    sentences = _extract_sentences(text)
+    if len(sentences) < 6:
+        return []
+
+    first_letters = [s[0].upper() for s in sentences]
+    acrostic = ''.join(first_letters)
+    n = len(first_letters)
+
+    # Check 1: Do the first letters contain dangerous dictionary words?
+    # Require min 4 chars to avoid false positives on short words (set, get, run, end, tag)
+    # matching as substrings in normal acrostics
+    acrostic_lower = acrostic.lower()
+    found_words = [w for w in _ACROSTIC_DANGER_WORDS if len(w) >= 4 and w in acrostic_lower]
+
+    if not found_words:
+        # No danger words means no actionable signal.
+        # Chi-square alone causes too many false positives on repetitive
+        # or structured documents.
+        return []
+
+    # Danger words found in the acrostic
+    # Confidence scales with number and length of matched words
+    total_matched_chars = sum(len(w) for w in found_words)
+    coverage = total_matched_chars / max(len(acrostic), 1)
+    confidence = min(0.50 + coverage * 0.5 + len(found_words) * 0.1, 0.95)
+    severity = Severity.HIGH if len(found_words) >= 2 else Severity.MEDIUM
+
+    return [Finding(
+        method=StegMethod.PROMPT_INJECTION,
+        severity=severity,
+        confidence=confidence,
+        description=(
+            f"Acrostic encoding detected: sentence-initial letters spell "
+            f"injection-related words: {', '.join(found_words)}"
+        ),
+        evidence=f"acrostic: {acrostic}, matched: {found_words}",
+        decoded_payload=acrostic,
+        metadata={"acrostic": acrostic, "danger_words": found_words,
+                   "sentence_count": n, "coverage": round(coverage, 2)},
+    )]
+
+
+# ─── Anomalous Unicode block detector ─────────────────────────────────────────
+
+# Unicode blocks that are suspicious when appearing in predominantly Latin text.
+# Each entry: (range_start, range_end, block_name)
+_ANOMALOUS_BLOCKS = [
+    (0x2070, 0x209F, "Superscripts and Subscripts"),
+    (0x2150, 0x218F, "Number Forms (fractions/roman numerals)"),
+    (0x2400, 0x2426, "Control Pictures"),
+    (0x2440, 0x244A, "OCR"),
+    (0x2460, 0x24FF, "Enclosed Alphanumerics"),
+    (0x2580, 0x259F, "Block Elements"),
+    (0x4E00, 0x9FFF, "CJK Unified Ideographs"),
+    (0x3400, 0x4DBF, "CJK Extension A"),
+    (0x1100, 0x11FF, "Hangul Jamo"),
+    (0xAC00, 0xD7AF, "Hangul Syllables"),
+    (0x10000, 0x1007F, "Linear B Syllabary"),
+    (0x10080, 0x100FF, "Linear B Ideograms"),
+    (0x10300, 0x1032F, "Old Italic"),
+    (0x12000, 0x1236E, "Cuneiform"),
+    (0x13000, 0x1342E, "Egyptian Hieroglyphs"),
+    (0x1D100, 0x1D1FF, "Musical Symbols"),
+    (0x1F100, 0x1F1FF, "Enclosed Alphanumeric Supplement"),
+]
+
+# Characters in the modifier letter range that are NOT in the homoglyph map
+# and are suspicious in Latin text (used for phonetic encoding attacks)
+_MODIFIER_LETTER_RANGE = (0x02B0, 0x02FF)
+
+
+def detect_anomalous_unicode(text: str) -> list[Finding]:
+    """Detect unusual Unicode blocks in Latin-dominant text.
+
+    Catches encoding attacks that use CJK, Control Pictures, Superscript
+    numbers, fraction chars, musical symbols, etc. to carry data in text
+    that is otherwise standard Latin script.
+    """
+    if len(text) < 5:
+        return []
+
+    # Determine script dominance
+    latin_count = 0
+    total_alpha = 0
+    for ch in text:
+        if ch.isalpha():
+            total_alpha += 1
+            cp = ord(ch)
+            if (0x0041 <= cp <= 0x007A) or (0x00C0 <= cp <= 0x024F):
+                latin_count += 1
+
+    # Only flag in Latin-dominant or script-ambiguous text
+    # (if text is mostly CJK, CJK chars are expected)
+    if total_alpha > 20 and latin_count / total_alpha < 0.3:
+        return []
+
+    # Scan for anomalous block characters
+    block_hits: dict[str, list[tuple[int, int]]] = {}
+    modifier_hits: list[tuple[int, int]] = []
+
+    for i, ch in enumerate(text):
+        cp = ord(ch)
+
+        # Check modifier letters not in homoglyph map
+        if _MODIFIER_LETTER_RANGE[0] <= cp <= _MODIFIER_LETTER_RANGE[1]:
+            if ch not in HOMOGLYPH_MAP:
+                modifier_hits.append((i, cp))
+            continue
+
+        # Check anomalous blocks
+        for start, end, name in _ANOMALOUS_BLOCKS:
+            if start <= cp <= end:
+                if name not in block_hits:
+                    block_hits[name] = []
+                block_hits[name].append((i, cp))
+                break
+
+    findings = []
+
+    # Report anomalous blocks
+    for block_name, hits in block_hits.items():
+        count = len(hits)
+        if count < 3:
+            continue  # Allow 1-2 stray chars (e.g., a single fraction is fine)
+
+        # Higher confidence for more chars
+        confidence = min(0.50 + (count * 0.05), 0.95)
+        severity = Severity.HIGH if count > 10 else Severity.MEDIUM
+
+        sample_cps = " ".join(f"U+{cp:04X}" for _, cp in hits[:10])
+        findings.append(Finding(
+            method=StegMethod.ANOMALOUS_UNICODE,
+            severity=severity,
+            confidence=confidence,
+            description=f"{count} characters from '{block_name}' block in Latin-dominant text",
+            evidence=f"Codepoints: {sample_cps}",
+            location=f"positions: {', '.join(str(p) for p, _ in hits[:10])}",
+            metadata={"block": block_name, "count": count},
+        ))
+
+    # Report modifier letter clusters
+    if len(modifier_hits) >= 3:
+        count = len(modifier_hits)
+        confidence = min(0.50 + (count * 0.05), 0.95)
+        severity = Severity.HIGH if count > 8 else Severity.MEDIUM
+        sample_cps = " ".join(f"U+{cp:04X}" for _, cp in modifier_hits[:10])
+        findings.append(Finding(
+            method=StegMethod.ANOMALOUS_UNICODE,
+            severity=severity,
+            confidence=confidence,
+            description=f"{count} modifier letter characters used for possible data encoding",
+            evidence=f"Codepoints: {sample_cps}",
+            location=f"positions: {', '.join(str(p) for p, _ in modifier_hits[:10])}",
+            metadata={"block": "Modifier Letters", "count": count},
+        ))
+
+    return findings
+
+
 # ─── Master text scanner ─────────────────────────────────────────────────────
 
 ALL_TEXT_DETECTORS: list[Callable[[str], list[Finding]]] = [
@@ -973,6 +1192,8 @@ ALL_TEXT_DETECTORS: list[Callable[[str], list[Finding]]] = [
     detect_invisible_separators,
     detect_trailing_whitespace_encoding,
     detect_interlinear_and_mongolian_vs,
+    detect_anomalous_unicode,
+    detect_acrostic_encoding,
 ]
 
 
