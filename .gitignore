@@ -16,3 +16,7 @@ venv/
 CLAUDE.md
 tests/fixtures/stegg/
 tests/fixtures/clean/
+.env*
+secrets/
+.agent-canary/
+exports/

@@ -52,6 +52,30 @@ def main() -> None:
     guard_parser.add_argument('--block', action='store_true',
                              help='Block (exit 1) if steg detected instead of stripping')
 
+    # trap command -- red team trap testing suite
+    trap_parser = subparsers.add_parser('trap',
+        help='Run agent trap battery tests against StegOFF defenses')
+    trap_parser.add_argument('--category', '-c',
+                            choices=['content_injection', 'semantic_manipulation',
+                                     'cognitive_state', 'behavioral_control',
+                                     'systemic', 'human_in_loop', 'all'],
+                            default='all',
+                            help='Trap category to test (default: all)')
+    trap_parser.add_argument('--json', action='store_true',
+                            help='Output results as JSON')
+    trap_parser.add_argument('--llm', action='store_true',
+                            help='Enable LLM-based detection (Layer 2)')
+
+    # scan-html command -- HTML trap detection
+    html_parser = subparsers.add_parser('scan-html',
+        help='Scan HTML for content injection traps')
+    html_parser.add_argument('target', nargs='?',
+                            help='HTML file path (reads stdin if omitted)')
+    html_parser.add_argument('--json', action='store_true',
+                            help='Output as JSON')
+    html_parser.add_argument('--sanitize', action='store_true',
+                            help='Output sanitized HTML instead of scan report')
+
     args = parser.parse_args()
 
     if not args.command:
@@ -66,6 +90,10 @@ def main() -> None:
         _handle_scan_dir(args)
     elif args.command == 'guard':
         _handle_guard(args)
+    elif args.command == 'trap':
+        _handle_trap(args)
+    elif args.command == 'scan-html':
+        _handle_scan_html(args)
 
 
 def _handle_scan(args):
@@ -145,6 +173,74 @@ def _handle_guard(args):
     clean = _strip_steg_chars(text)
     print(clean, end='')
     sys.exit(0)
+
+
+def _handle_trap(args):
+    """Run the agent trap battery test suite."""
+    from stegoff.traps.base import TrapCategory
+    from stegoff.traps.runner import TrapRunner
+
+    runner = TrapRunner(use_llm=args.llm)
+
+    if args.category == 'all':
+        battery = runner.run_all()
+    else:
+        cat = TrapCategory(args.category)
+        battery = runner.run_category(cat)
+
+    if args.json:
+        print(battery.to_json())
+    else:
+        battery.print_report()
+
+    # Exit code: 0 = all blocked, 1 = some bypassed
+    sys.exit(0 if battery.total_bypassed == 0 else 1)
+
+
+def _handle_scan_html(args):
+    """Scan HTML for content injection traps."""
+    from stegoff.detectors.trapsweep import scan_html_traps, sanitize_html_traps
+    from stegoff.report import ScanReport
+
+    if args.target:
+        path = Path(args.target)
+        if not path.exists():
+            print(f"Error: {path} not found", file=sys.stderr)
+            sys.exit(1)
+        html_content = path.read_text(encoding='utf-8', errors='replace')
+        source = str(path)
+    else:
+        html_content = sys.stdin.read()
+        source = "stdin"
+
+    if args.sanitize:
+        clean, ops = sanitize_html_traps(html_content)
+        print(clean)
+        if ops:
+            print(f"\nOperations: {', '.join(ops)}", file=sys.stderr)
+        sys.exit(0)
+
+    findings = scan_html_traps(html_content, source=source)
+    if not findings:
+        if not args.json:
+            print(f"[CLEAN] {source} — no content injection traps detected")
+        else:
+            print('{"clean": true, "findings": []}')
+        sys.exit(0)
+
+    if args.json:
+        import json
+        print(json.dumps({
+            "clean": False,
+            "finding_count": len(findings),
+            "findings": [f.to_dict() for f in findings],
+        }, indent=2))
+    else:
+        for f in findings:
+            print(f"[{f.severity.name}] {f.description}")
+            if f.evidence:
+                print(f"  evidence: {f.evidence[:200]}")
+    sys.exit(2)
 
 
 def _strip_steg_chars(text: str) -> str:
