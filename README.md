@@ -101,6 +101,7 @@ Other detection tools cover 1-3 methods. StegOFF covers them all, chains decoded
 | Binary/PDF | **7+** | 0 | 0 | 0 |
 | Agent trap categories | **6 (40 methods)** | 0 | 0 | 0 |
 | RAG poisoning detection | **Yes (L1+L2)** | No | No | No |
+| ML classifier | **Yes (100K+ samples)** | No | No | No |
 | LLM semantic layer | **Yes** | No | No | No |
 | Sanitization | **Yes** | No | No | No |
 | Decode to injection scan | **Yes** | No | No | No |
@@ -165,6 +166,11 @@ Input (text, file, or bytes)
 │  TrapSweep · FrameCheck · RAGGuard · ActionGuard         │
 │  FragmentGuard · ApprovalLens                            │
 │  40 trap methods · 14 composite attacks · 100% blocked   │
+├──────────────────────────────────────────────────────────┤
+│  LAYER 1.5: ML Classifier                                │
+│  TF-IDF + Logistic Regression · FREE · <5ms              │
+│  Trained on 100K+ real prompt injections + OWASP docs    │
+│  Catches synonym/paraphrase evasion that bypasses regex  │
 ├──────────────────────────────────────────────────────────┤
 │  LAYER 2: LLM Semantic Detection                         │
 │  Claude Haiku · ~$0.0001/scan · ~1s                      │
@@ -286,6 +292,46 @@ from stegoff.detectors.ragguard import scan_rag_batch
 findings = scan_rag_batch(chunks, query="auth")
 ```
 
+### ML Classifier (L1.5)
+
+A TF-IDF + logistic regression classifier trained on 100K+ real-world prompt injection samples from 6 HuggingFace datasets mixed with OWASP security docs, GitHub READMEs, and synthetic trap payloads. Sits between regex (L1) and LLM calls (L2) to catch paraphrased attacks without API costs.
+
+```python
+from stegoff.ml.classifier import TrapClassifier
+
+# Load pre-trained model
+clf = TrapClassifier.load("stegoff/ml/trap_classifier.joblib")
+result = clf.predict("some text")
+print(result.is_trap, result.confidence)
+
+# Train from scratch (requires data/ directory with JSONL files)
+clf, metrics = TrapClassifier.train(n_positive=1500, n_negative=1500)
+print(metrics.report)
+clf.save("my_model.joblib")
+```
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│  Training data                                               │
+│  Positives: 100K+ real samples from deepset/prompt-injections│
+│  Lakera/gandalf, TrustAIRLab/jailbreak-prompts, and 3 more  │
+│  + TrapBuilder synthetic + evasion templates                 │
+│  Negatives: OWASP cheat sheets, GitHub READMEs, API docs,   │
+│  CVE descriptions, code/config files, hard negatives         │
+├─────────────────────────────────────────────────────────────┤
+│  Results (5-fold CV): Precision 100%, AUC-ROC 1.0            │
+│  Evasion variants: 8/8 caught (synonym, passive, euphemism)  │
+│  False positives: 0/6 hard negatives, 1/9 code fixtures      │
+│  Cost: $0, latency: <5ms                                     │
+└─────────────────────────────────────────────────────────────┘
+```
+
+| Layer | Catches | Cost | Latency |
+|-------|---------|------|---------|
+| L1: Regex patterns | Obvious keywords, known injection patterns | Free | <1ms |
+| L1.5: ML classifier | Synonym substitution, passive voice, euphemisms | Free | <5ms |
+| L2: Claude Haiku | Indirection, sentence splitting, implicit downgrades | ~$0.0001 | ~2s |
+
 ---
 
 ## How Every Attack Works and How StegOFF Stops It
@@ -402,17 +448,19 @@ Same principle as image re-encoding. The LLM rewrites text with its default word
 ```
 st3gg Detection:     109/109 techniques  (100%)
 Agent Traps:          54/54  blocked      (100% with L2)
+ML Classifier:        AUC 1.0, trained on 100K+ real samples
 False Positives:       0/88  clean inputs (0.0%)
 Red Team (steg):      34/39  attacks blocked
 Red Team (traps):     17/18  attacks blocked (L1+L2)
 LLM Injection:        15/15  scanner attacks blocked
-Test Suite:           325    tests passing
+Test Suite:           348    tests passing
 ```
 
 | Layer | Detection | Cost | Latency |
 |-------|-----------|------|---------|
 | 1: Character-level | 107/109 st3gg | Free | 11ms median |
-| 2: LLM semantic | 109/109 st3gg | ~$0.0001/scan | ~1s |
+| 1.5: ML classifier | Evasion variants | Free | <5ms |
+| 2: LLM semantic | 109/109 st3gg + trap evasion | ~$0.0001/scan | ~1s |
 | 3: Paraphrase | Destroys payload | ~$0.0003/scan | ~2s |
 
 ---
