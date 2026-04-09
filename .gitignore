@@ -20,3 +20,5 @@ tests/fixtures/clean/
 secrets/
 .agent-canary/
 exports/
+stegoff/ml/data/
+stegoff/ml/gen_*.py

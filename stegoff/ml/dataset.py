@@ -26,26 +26,94 @@ class Sample:
     source: str = ""
 
 
+def _load_real_data(path: str, label: int, max_samples: int, rng: random.Random) -> list[Sample]:
+    """Load real-world samples from a JSONL file."""
+    import json
+    from pathlib import Path
+
+    fpath = Path(path)
+    if not fpath.exists():
+        return []
+
+    all_samples = []
+    for line in open(fpath, "r", encoding="utf-8"):
+        try:
+            obj = json.loads(line.strip())
+            text = obj.get("text", "")
+            if len(text) < 30 or len(text) > 5000:
+                continue
+            all_samples.append(Sample(
+                text=text,
+                label=label,
+                category=obj.get("category", obj.get("source", "real")),
+                source=obj.get("source", "real"),
+            ))
+        except (json.JSONDecodeError, KeyError):
+            continue
+
+    rng.shuffle(all_samples)
+    return all_samples[:max_samples]
+
+
 def generate_dataset(
     n_positive: int = 500,
     n_negative: int = 500,
     seed: int = 42,
+    use_real_data: bool = True,
 ) -> list[Sample]:
-    """Generate a balanced dataset of trap and clean samples."""
+    """Generate a balanced dataset of trap and clean samples.
+
+    When use_real_data=True, mixes real-world samples (HuggingFace prompt
+    injection datasets, OWASP docs, GitHub READMEs) with synthetic samples
+    for better generalization.
+    """
     rng = random.Random(seed)
     samples = []
+    data_dir = str(__import__("pathlib").Path(__file__).parent / "data")
 
     # ── Positive samples ─────────────────────────────────────
-    positives = _generate_positives(n_positive, rng)
+    if use_real_data:
+        # 60% real, 30% synthetic TrapBuilder, 10% evasion templates
+        n_real_pos = int(n_positive * 0.6)
+        n_synth_pos = int(n_positive * 0.3)
+        n_evasion = n_positive - n_real_pos - n_synth_pos
+
+        real_pos = _load_real_data(f"{data_dir}/real_positives.jsonl", 1, n_real_pos, rng)
+        samples.extend(real_pos)
+        # Fill remainder with synthetic if real data is short
+        n_synth_pos += max(0, n_real_pos - len(real_pos))
+    else:
+        n_synth_pos = int(n_positive * 0.9)
+        n_evasion = n_positive - n_synth_pos
+
+    positives = _generate_positives(n_synth_pos, rng)
     samples.extend(positives)
 
-    # ── Evasion positives (10% of positive budget) ─────────
-    n_evasion = n_positive // 10
     evasions = _generate_evasion_positives(n_evasion, rng)
     samples.extend(evasions)
 
     # ── Negative samples ─────────────────────────────────────
-    negatives = _generate_negatives(n_negative, rng)
+    if use_real_data:
+        # 40% real docs, 15% code/config, 15% hard negatives, 30% synthetic templates
+        n_real_neg = int(n_negative * 0.4)
+        n_code = int(n_negative * 0.15)
+        n_hard = int(n_negative * 0.15)
+        n_synth_neg = n_negative - n_real_neg - n_code - n_hard
+
+        real_neg = _load_real_data(f"{data_dir}/real_negatives.jsonl", 0, n_real_neg, rng)
+        samples.extend(real_neg)
+        n_synth_neg += max(0, n_real_neg - len(real_neg))
+
+        code_neg = _load_real_data(f"{data_dir}/code_negatives.jsonl", 0, n_code, rng)
+        samples.extend(code_neg)
+
+        fixture_neg = _load_real_data(f"{data_dir}/fixture_negatives.jsonl", 0, n_code, rng)
+        samples.extend(fixture_neg)
+    else:
+        n_synth_neg = n_negative
+        n_hard = 0
+
+    negatives = _generate_negatives(n_synth_neg + (n_hard if not use_real_data else 0), rng)
     samples.extend(negatives)
 
     rng.shuffle(samples)
