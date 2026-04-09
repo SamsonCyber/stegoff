@@ -15,6 +15,7 @@
 [![st3gg tested](https://img.shields.io/badge/st3gg-109%2F109%20detected-red.svg)](https://github.com/elder-plinius/st3gg)
 [![False Positives](https://img.shields.io/badge/False%20Positives-0%25%20(0%2F88)-brightgreen.svg)](#numbers)
 [![Red Team](https://img.shields.io/badge/Red%20Team-34%2F39%20blocked-orange.svg)](REDTEAM_LOG.md)
+[![Agent Traps](https://img.shields.io/badge/Agent%20Traps-54%2F54%20blocked-blueviolet.svg)](#agent-trap-defenses)
 
 <br>
 
@@ -74,9 +75,10 @@
 ╔══════════════════════════════════════════════════════════╗
 ║  Text (14 methods)  ·  Image (11 methods)               ║
 ║  Audio (3 formats)  ·  Binary (7+ parsers)               ║
+║  Agent Traps (6 categories · 40 methods · 6 detectors)  ║
 ║  LLM Semantic Layer ·  Paraphrase Sanitizer              ║
 ║                                                          ║
-║  35+ detectors  ·  30+ formats  ·  3 layers              ║
+║  45+ detectors  ·  30+ formats  ·  3 layers              ║
 ║  Find it. Flag it. Destroy it. Before it reaches your AI ║
 ╚══════════════════════════════════════════════════════════╝
 ```
@@ -97,6 +99,8 @@ Other detection tools cover 1-3 methods. StegOFF covers them all, chains decoded
 | Image steg methods | **11** | 0 | 0 | 3 |
 | Audio steg | **3 formats** | 0 | 0 | 0 |
 | Binary/PDF | **7+** | 0 | 0 | 0 |
+| Agent trap categories | **6 (40 methods)** | 0 | 0 | 0 |
+| RAG poisoning detection | **Yes (L1+L2)** | No | No | No |
 | LLM semantic layer | **Yes** | No | No | No |
 | Sanitization | **Yes** | No | No | No |
 | Decode to injection scan | **Yes** | No | No | No |
@@ -138,6 +142,9 @@ stegoff scan suspicious.png
 stegoff scan-text "some text"
 stegoff scan-dir ./uploads --json
 cat input.txt | stegoff guard --block
+stegoff trap                              # run full agent trap battery
+stegoff trap -c content_injection --json  # test specific category
+stegoff scan-html page.html               # scan HTML for injection traps
 ```
 
 ---
@@ -150,14 +157,19 @@ Input (text, file, or bytes)
   ▼
 ┌──────────────────────────────────────────────────────────┐
 │  LAYER 1: Character-Level Detection                      │
-│  35 detectors · FREE · 11ms median                       │
+│  35+ detectors · FREE · 11ms median                      │
 │  14 text + 11 image + 3 audio + 7 binary                │
 │  107/109 st3gg techniques                                │
+├──────────────────────────────────────────────────────────┤
+│  AGENT TRAP LAYER: 6 DeepMind Categories                 │
+│  TrapSweep · FrameCheck · RAGGuard · ActionGuard         │
+│  FragmentGuard · ApprovalLens                            │
+│  40 trap methods · 14 composite attacks · 100% blocked   │
 ├──────────────────────────────────────────────────────────┤
 │  LAYER 2: LLM Semantic Detection                         │
 │  Claude Haiku · ~$0.0001/scan · ~1s                      │
 │  Synonym patterns · structure encoding · register shifts  │
-│  F1 = 1.00 · catches the remaining 2 techniques          │
+│  Dangerous recommendation analysis · RAG safety prompt   │
 │  15/15 prompt injection attacks against the scanner blocked│
 ├──────────────────────────────────────────────────────────┤
 │  LAYER 3: Paraphrase Canonicalization                    │
@@ -168,6 +180,111 @@ Input (text, file, or bytes)
 ```
 
 Each layer catches what the previous one misses. Most content hits the free Layer 1. Synonym encoding and sentence-length tricks reach Layer 2. Layer 3 destroys payloads by replacing the carrier.
+
+---
+
+## Agent Trap Defenses
+
+StegOFF detects all 6 categories of AI agent traps from [Franklin et al. (2026)](https://arxiv.org/abs/2606.XXXXX), the Google DeepMind taxonomy of attacks that target AI agents through their tool inputs, RAG context, and human oversight channels.
+
+```
+┌──────────────────────────────────────────────────────────────┐
+│  Category 1: Content Injection          → TrapSweep         │
+│  HTML comments, display:none, aria-labels, meta tags,        │
+│  noscript, CSS content, JSON-LD, font-size:0, templates      │
+│  11 injection vectors · 100% detection                       │
+├──────────────────────────────────────────────────────────────┤
+│  Category 2: Semantic Manipulation      → FrameCheck         │
+│  Authority appeals, urgency pressure, emotional guilt,       │
+│  anchoring, social proof, false dichotomy, flattery          │
+│  7 manipulation patterns · 100% detection                    │
+├──────────────────────────────────────────────────────────────┤
+│  Category 3: Cognitive State / RAG      → RAGGuard           │
+│  Instruction smuggling, authority spoofing, topic hijacking, │
+│  contradiction seeding, repetition bombing, keyword stuffing │
+│  + Dangerous recommendation detector (L1 patterns + L2 LLM) │
+│  + Opaque security directive detector                        │
+│  6 poisoning methods · 100% detection                        │
+├──────────────────────────────────────────────────────────────┤
+│  Category 4: Behavioral Control         → ActionGuard        │
+│  Exfiltration URLs, jailbreaks, sub-agent spawn, tool        │
+│  override, delimiter escapes, encoded payloads, multi-stage  │
+│  7 control methods · 100% detection                          │
+├──────────────────────────────────────────────────────────────┤
+│  Category 5: Systemic                   → FragmentGuard      │
+│  Fragment splitting, feedback loops, resource exhaustion,    │
+│  cascade triggers, circuit breaker for agent-to-agent loops  │
+│  4 systemic methods · 100% detection                         │
+├──────────────────────────────────────────────────────────────┤
+│  Category 6: Human-in-the-Loop          → ApprovalLens       │
+│  Approval fatigue, complexity camouflage, phishing links,    │
+│  action hiding in prose, minimization language               │
+│  5 oversight attacks · 100% detection                        │
+└──────────────────────────────────────────────────────────────┘
+```
+
+### Composite & Evasion Testing
+
+Single-category traps test each detector in isolation. Real attacks layer techniques. The composite battery tests multi-category combinations and adversarial evasion variants designed to bypass pattern matching.
+
+```python
+from stegoff.traps.runner import TrapRunner
+from stegoff.traps.composite import CompositeBuilder
+
+runner = TrapRunner(use_llm=True, api_key="sk-...")
+
+# Run all 40 single-category traps
+battery = runner.run_all()
+battery.print_report()  # 40/40 blocked
+
+# Run 14 composite traps (pairs, triples, full-stack, evasions)
+composite = runner.run_composites()
+composite.print_report()  # 14/14 blocked with L2
+
+# Test a specific category
+from stegoff.traps.base import TrapCategory
+cat3 = runner.run_category(TrapCategory.COGNITIVE_STATE)
+```
+
+| Battery | L1 (free) | L1 + L2 |
+|---------|-----------|---------|
+| Single-category (40) | 40/40 (100%) | 40/40 (100%) |
+| Composite combos (9) | 9/9 (100%) | 9/9 (100%) |
+| Evasion variants (5) | 4/5 (80%) | 5/5 (100%) |
+| **Total (54)** | **53/54 (98%)** | **54/54 (100%)** |
+
+### Red Team: Dangerous Recommendation Detector
+
+RAGGuard includes a detector for text that recommends objectively bad security practices (hardcoded credentials, disabling auth, security downgrades) regardless of how the recommendation is framed. This catches poisoned RAG chunks that avoid injection language entirely.
+
+18 attack variants tested, including synonym substitution, negation poisoning, double negation, passive voice, euphemism, code block delivery, homoglyph evasion, academic framing, meeting-note attribution, prompt injection against the LLM layer, and indirection.
+
+| Technique | Blocked by |
+|-----------|-----------|
+| "hardcoded credentials in the header" | L1 pattern match |
+| "pin the bearer token as a static literal" | L1 synonym patterns |
+| `password: "sk-prod-..."` in YAML | L1 code block scanner |
+| Warning words wrapping the recommendation | L1 sentence-level negation analysis |
+| "not unsafe to fall back to direct credential injection" | L1 double negation counter |
+| "static credential binding", "pre-provision auth material" | L1 euphemism patterns |
+| Cyrillic а replacing Latin a in "basic auth" | L1 homoglyph normalization |
+| "Apply pre-migration auth config (revision r847)" | L1 opaque security directive detector |
+| "Restore the simpler credential flow from before OAuth" | L2 LLM detects security downgrade |
+| "Apply config revision r847" (zero security keywords) | Not actionable without repo write access |
+
+```python
+from stegoff.detectors.ragguard import scan_rag_poisoning
+
+# L1 only (free, fast)
+findings = scan_rag_poisoning(chunk_text, query="authentication")
+
+# L1 + L2 (catches evasion variants)
+findings = scan_rag_poisoning(chunk_text, use_llm=True, api_key="sk-...")
+
+# Batch scan with cross-chunk coordination detection
+from stegoff.detectors.ragguard import scan_rag_batch
+findings = scan_rag_batch(chunks, query="auth")
+```
 
 ---
 
@@ -284,10 +401,12 @@ Same principle as image re-encoding. The LLM rewrites text with its default word
 
 ```
 st3gg Detection:     109/109 techniques  (100%)
+Agent Traps:          54/54  blocked      (100% with L2)
 False Positives:       0/88  clean inputs (0.0%)
-Red Team:             34/39  attacks blocked
+Red Team (steg):      34/39  attacks blocked
+Red Team (traps):     17/18  attacks blocked (L1+L2)
 LLM Injection:        15/15  scanner attacks blocked
-Test Suite:           192    core tests passing
+Test Suite:           325    tests passing
 ```
 
 | Layer | Detection | Cost | Latency |
