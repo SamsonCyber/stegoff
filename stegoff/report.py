@@ -54,6 +54,11 @@ class StegMethod(Enum):
     ANOMALOUS_UNICODE = "anomalous_unicode_blocks"
     # Prompt injection
     PROMPT_INJECTION = "prompt_injection_payload"
+    # Agent trap categories (Franklin et al., 2026)
+    CONTENT_INJECTION_TRAP = "content_injection_trap"
+    SEMANTIC_MANIPULATION = "semantic_manipulation"
+    COGNITIVE_STATE_TRAP = "cognitive_state_trap"
+    HUMAN_IN_LOOP_TRAP = "human_in_loop_trap"
 
 
 @dataclass
