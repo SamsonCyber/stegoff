@@ -21,6 +21,39 @@ from stegoff.detectors.prompt_injection import scan_payload_for_injection, scan_
 from stegoff.detectors.llm import detect_semantic_steg
 
 
+# ── L2 detection: local transformer with Haiku fallback ────────────
+_transformer_detector = None
+_transformer_load_attempted = False
+
+
+def _get_transformer_detector():
+    """Lazy-load the transformer detector once."""
+    global _transformer_detector, _transformer_load_attempted
+    if _transformer_load_attempted:
+        return _transformer_detector
+    _transformer_load_attempted = True
+    try:
+        from stegoff.ml.transformer_classifier import TransformerDetector
+        _transformer_detector = TransformerDetector.load()
+    except Exception:
+        _transformer_detector = None
+    return _transformer_detector
+
+
+def _run_l2_detection(text: str, api_key: str | None = None) -> list:
+    """L2 semantic detection: local transformer if available, Haiku fallback.
+
+    The fine-tuned DistilBERT catches all 18 red team attack categories
+    including JSON tool calls, complexity camouflage, double negation,
+    and opaque directives. Haiku is only used when the transformer model
+    isn't installed.
+    """
+    detector = _get_transformer_detector()
+    if detector is not None:
+        return detector.detect(text)
+    return detect_semantic_steg(text, api_key=api_key)
+
+
 # MIME type to detector routing
 IMAGE_MIMES = {'image/png', 'image/jpeg', 'image/gif', 'image/bmp', 'image/tiff', 'image/webp'}
 TEXT_MIMES = {'text/plain', 'text/html', 'text/csv', 'text/markdown', 'text/xml',
@@ -153,9 +186,11 @@ def scan_text(text: str, source: str = "<text>", use_llm: bool = False,
     for f in injection_hits:
         report.add(f)
 
-    # LLM semantic analysis (opt-in, catches synonym/structure encoding)
+    # L2 semantic analysis (opt-in, catches synonym/structure encoding)
+    # Prefer local transformer if available, fall back to Haiku API
     if use_llm and report.clean:
-        for f in detect_semantic_steg(text, api_key=api_key):
+        l2_findings = _run_l2_detection(text, api_key)
+        for f in l2_findings:
             report.add(f)
 
     return report

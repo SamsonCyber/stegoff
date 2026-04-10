@@ -22,3 +22,4 @@ secrets/
 exports/
 stegoff/ml/data/
 stegoff/ml/gen_*.py
+stegoff/ml/transformer_model/
