@@ -551,6 +551,46 @@ Test Suite:           320+   tests passing
 
 ---
 
+## External Benchmarks
+
+Evaluated against published prompt injection datasets not used during training. StegOFF is a content scanner designed for documents, RAG chunks, and uploads. It detects injections hiding in text that should be data, not instructions.
+
+### Attack Detection (Recall)
+
+How many known injection attacks does StegOFF catch?
+
+| Dataset | Samples | L1 (regex) | L2 (transformer) | L1+L2 (full) |
+|---------|---------|------------|-------------------|---------------|
+| [TensorTrust](https://huggingface.co/datasets/qxcv/tensor-trust) extraction attacks | 570 | 63.0% | **97.7%** | **98.6%** |
+| [Gandalf](https://huggingface.co/datasets/Lakera/gandalf_ignore_instructions) (Lakera) | 777 | 52.6% | **100.0%** | **98.7%** |
+| [TensorTrust](https://huggingface.co/datasets/qxcv/tensor-trust) detection | 115 pos | 39.1% | **96.5%** | **98.3%** |
+| [SafeGuard](https://huggingface.co/datasets/xTRam1/safe-guard-prompt-injection) (xTRam1) | 650 pos | 45.1% | **99.2%** | **99.7%** |
+
+The transformer L2 catches 96-100% of attacks across all four datasets. L1 regex alone catches 39-63%, handling the obvious patterns. The combination misses under 2% on every dataset.
+
+### Precision on Mixed Datasets
+
+How often does StegOFF flag clean text as an attack?
+
+| Dataset | Clean Samples | L1 Precision | L2 Precision | L1+L2 Precision |
+|---------|--------------|-------------|-------------|-----------------|
+| TensorTrust detection | 115 | 57.0% | 50.5% | 60.4% |
+| SafeGuard (xTRam1) | 1,410 | 54.9% | 31.6% | 31.7% |
+
+The precision gap on SafeGuard reflects a design tradeoff. SafeGuard's "clean" samples are NLP task instructions ("In this task, you are given a question...") that are structurally identical to injection attacks: both are imperatives directed at an AI system. The model was trained to scan content (documents, security advisories, business reports, code) for hidden attacks, not to classify whether an AI-directed prompt is benign. In its intended deployment (scanning RAG context, uploaded files, user-submitted content), instructions addressed to the model aren't expected in the input.
+
+On our own clean corpus (88 OWASP docs, GitHub READMEs, API documentation, security advisories, business reports, meeting notes, code reviews, changelogs), false positives remain 0%.
+
+### Reproducing
+
+```bash
+pip install datasets huggingface_hub
+python benchmarks/run_benchmarks.py              # all datasets, all layers
+python benchmarks/run_benchmarks.py --dataset gandalf --layer l2
+```
+
+---
+
 ## Red Team
 
 39 custom bypass attempts designed by reading StegOFF's source code. Full log: [REDTEAM_LOG.md](REDTEAM_LOG.md)
