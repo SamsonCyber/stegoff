@@ -63,24 +63,34 @@ class TransformerDetector:
         meta = json.loads(meta_path.read_text())
         max_len = meta.get("max_len", 256)
         threshold = meta.get("threshold", 0.5)
+        is_dual = meta.get("dual_channel", False)
 
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
         tokenizer = AutoTokenizer.from_pretrained(str(model_dir))
-        model = AutoModelForSequenceClassification.from_pretrained(str(model_dir))
+
+        if is_dual:
+            from stegoff.ml.dual_channel_model import DualChannelClassifier
+            model = DualChannelClassifier.load_pretrained(model_dir)
+        else:
+            model = AutoModelForSequenceClassification.from_pretrained(str(model_dir))
+
         model.to(device)
         model.eval()
 
-        logger.info("Loaded transformer detector from %s (threshold=%.4f, device=%s)",
+        detector = cls(model, tokenizer, max_len, threshold, device)
+        detector._is_dual = is_dual
+        logger.info("Loaded %s detector from %s (threshold=%.4f, device=%s)",
+                     "dual-channel" if is_dual else "single-channel",
                      model_dir, threshold, device)
-        return cls(model, tokenizer, max_len, threshold, device)
+        return detector
 
     def predict(self, text: str) -> TransformerPrediction:
         """Classify a single text sample."""
         import torch
 
+        truncated = text[:3000]
         encoding = self._tokenizer(
-            text[:3000],  # same truncation as Haiku path
+            truncated,
             truncation=True,
             padding="max_length",
             max_length=self._max_len,
@@ -90,8 +100,15 @@ class TransformerDetector:
         attention_mask = encoding["attention_mask"].to(self._device)
 
         with torch.no_grad():
-            outputs = self._model(input_ids=input_ids, attention_mask=attention_mask)
-            probs = torch.softmax(outputs.logits, dim=1)
+            if getattr(self, "_is_dual", False):
+                from stegoff.ml.heuristic_features import extract_features
+                heur = torch.tensor([extract_features(truncated)],
+                                    dtype=torch.float32).to(self._device)
+                logits = self._model(input_ids, attention_mask, heur)
+            else:
+                outputs = self._model(input_ids=input_ids, attention_mask=attention_mask)
+                logits = outputs.logits
+            probs = torch.softmax(logits, dim=1)
             trap_score = float(probs[0, 1].cpu())
 
         return TransformerPrediction(

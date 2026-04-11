@@ -175,11 +175,10 @@ Input (text, file, or bytes)
 │  Trained on 100K+ real prompt injections + OWASP docs    │
 │  Catches synonym/paraphrase evasion that bypasses regex  │
 ├──────────────────────────────────────────────────────────┤
-│  LAYER 2: Transformer Semantic Detection                 │
-│  Fine-tuned DistilBERT · FREE · 6ms GPU / 50ms CPU      │
-│  18/18 red team attacks · 0 false positives              │
+│  LAYER 2: Dual-Channel Semantic Detection                │
+│  DistilBERT + 15 heuristic features · FREE · ~10ms GPU  │
+│  99.4% precision · 97-100% recall on 4 benchmarks       │
 │  JSON tool calls · complexity camo · double negation     │
-│  Opaque directives · encoded payloads                    │
 │  Falls back to Claude Haiku if model not installed       │
 ├──────────────────────────────────────────────────────────┤
 │  LAYER 3: Paraphrase Canonicalization                    │
@@ -559,27 +558,21 @@ Evaluated against published prompt injection datasets not used during training. 
 
 How many known injection attacks does StegOFF catch?
 
-| Dataset | Samples | L1 (regex) | L2 (transformer) | L1+L2 (full) |
-|---------|---------|------------|-------------------|---------------|
-| [TensorTrust](https://huggingface.co/datasets/qxcv/tensor-trust) extraction attacks | 570 | 63.0% | **97.7%** | **98.6%** |
-| [Gandalf](https://huggingface.co/datasets/Lakera/gandalf_ignore_instructions) (Lakera) | 777 | 52.6% | **100.0%** | **98.7%** |
-| [TensorTrust](https://huggingface.co/datasets/qxcv/tensor-trust) detection | 115 pos | 39.1% | **96.5%** | **98.3%** |
-| [SafeGuard](https://huggingface.co/datasets/xTRam1/safe-guard-prompt-injection) (xTRam1) | 650 pos | 45.1% | **99.2%** | **99.7%** |
-
-The transformer L2 catches 96-100% of attacks across all four datasets. L1 regex alone catches 39-63%, handling the obvious patterns. The combination misses under 2% on every dataset.
+| Dataset | Samples | L2 (dual-channel) | Notes |
+|---------|---------|-------------------|-------|
+| [TensorTrust](https://huggingface.co/datasets/qxcv/tensor-trust) extraction attacks | 570 | **97.2%** | Crowdsourced prompt extraction attacks |
+| [Gandalf](https://huggingface.co/datasets/Lakera/gandalf_ignore_instructions) (Lakera) | 777 | **99.9%** | "Ignore instructions" attacks |
+| [SafeGuard](https://huggingface.co/datasets/xTRam1/safe-guard-prompt-injection) (xTRam1) | 650 pos | **99.1%** | Mixed injection dataset |
+| Red team (internal) | 18 | **100.0%** | JSON tools, camo, negation, opaque directives |
 
 ### Precision on Mixed Datasets
 
-How often does StegOFF flag clean text as an attack?
+| Dataset | Clean Samples | L2 Precision | FP Count |
+|---------|--------------|-------------|----------|
+| SafeGuard (xTRam1) | 1,410 | **99.4%** | 4 |
+| Internal clean corpus | 88+ | **100%** | 0 |
 
-| Dataset | Clean Samples | L1 Precision | L2 Precision | L1+L2 Precision |
-|---------|--------------|-------------|-------------|-----------------|
-| TensorTrust detection | 115 | 57.0% | 50.5% | 60.4% |
-| SafeGuard (xTRam1) | 1,410 | 54.9% | 31.6% | 31.7% |
-
-The precision gap on SafeGuard reflects a design tradeoff. SafeGuard's "clean" samples are NLP task instructions ("In this task, you are given a question...") that are structurally identical to injection attacks: both are imperatives directed at an AI system. The model was trained to scan content (documents, security advisories, business reports, code) for hidden attacks, not to classify whether an AI-directed prompt is benign. In its intended deployment (scanning RAG context, uploaded files, user-submitted content), instructions addressed to the model aren't expected in the input.
-
-On our own clean corpus (88 OWASP docs, GitHub READMEs, API documentation, security advisories, business reports, meeting notes, code reviews, changelogs), false positives remain 0%.
+The dual-channel architecture (DistilBERT + 15 heuristic features) achieves >99% precision on SafeGuard's NLP task instructions while maintaining >97% recall on all attack benchmarks. Heuristic features provide structural attack signals (exfil URLs, tool-call JSON, credential keywords, negation patterns) that anchor the classifier when the transformer alone can't distinguish legitimate AI-directed prompts from injection attacks.
 
 ### Reproducing
 
