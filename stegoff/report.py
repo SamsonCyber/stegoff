@@ -59,6 +59,10 @@ class StegMethod(Enum):
     SEMANTIC_MANIPULATION = "semantic_manipulation"
     COGNITIVE_STATE_TRAP = "cognitive_state_trap"
     HUMAN_IN_LOOP_TRAP = "human_in_loop_trap"
+    # Semantic manipulation detectors (v0.4.0)
+    AUTHORITY_FABRICATION = "authority_fabrication"
+    POLARIZATION_BIAS = "polarization_bias"
+    HIDDEN_HTML_CONTENT = "hidden_html_content"
 
 
 @dataclass
@@ -95,6 +99,7 @@ class ScanReport:
     clean: bool = True
     highest_severity: Severity = Severity.CLEAN
     prompt_injection_detected: bool = False
+    semantic_manipulation_detected: bool = False
 
     def add(self, finding: Finding) -> None:
         self.findings.append(finding)
@@ -103,6 +108,10 @@ class ScanReport:
             self.highest_severity = finding.severity
         if finding.method == StegMethod.PROMPT_INJECTION:
             self.prompt_injection_detected = True
+        if finding.method in (StegMethod.AUTHORITY_FABRICATION,
+                              StegMethod.POLARIZATION_BIAS,
+                              StegMethod.HIDDEN_HTML_CONTENT):
+            self.semantic_manipulation_detected = True
 
     @property
     def finding_count(self) -> int:
