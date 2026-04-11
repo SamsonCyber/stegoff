@@ -19,6 +19,9 @@ from stegoff.detectors.binary import scan_binary
 from stegoff.detectors.audio import scan_audio
 from stegoff.detectors.prompt_injection import scan_payload_for_injection, scan_raw_text_for_injection
 from stegoff.detectors.llm import detect_semantic_steg
+from stegoff.detectors.authority import scan_authority
+from stegoff.detectors.polarization import scan_polarization
+from stegoff.detectors.semantic_classifier import scan_semantic
 
 
 # ── L2 detection: local transformer with Haiku fallback ────────────
@@ -192,6 +195,14 @@ def scan_text(text: str, source: str = "<text>", use_llm: bool = False,
         l2_findings = _run_l2_detection(text, api_key)
         for f in l2_findings:
             report.add(f)
+
+    # Semantic manipulation detectors (agent defense layer)
+    for f in scan_authority(text, source=source):
+        report.add(f)
+    for f in scan_polarization(text, source=source):
+        report.add(f)
+    for f in scan_semantic(text, source=source):
+        report.add(f)
 
     return report
 
