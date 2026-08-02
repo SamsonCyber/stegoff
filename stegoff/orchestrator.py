@@ -368,6 +368,7 @@ _ENCODED_INJECTION_CATEGORIES = frozenset({
     "cs_override", "cs_system_prompt", "ro_override", "ro_system_prompt",
     "hu_override", "hu_system_prompt", "fi_override", "fi_system_prompt",
     "bn_override", "bn_system_prompt",
+    "sr_override", "sr_system_prompt",
     "message_delimiter_injection",
     "format_delimiter_injection",
     "markdown_delimiter_injection",
