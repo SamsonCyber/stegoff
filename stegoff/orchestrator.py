@@ -337,6 +337,20 @@ def _collect_decoded_variants(text: str) -> list[tuple[str, str]]:
     # invent accidental tokens (e.g. 'dan') on benign prose. Reversal remains
     # in injection_scan_variants for raw user text only.
 
+    # uuencode (injection-gated)
+    if re.search(r"^begin\s+\d+\s+\S+", stripped, re.I | re.M) or (
+        len(stripped) >= 12 and re.match(r"^[\x20-\x5f]+$", stripped.splitlines()[0] if stripped else "")
+    ):
+        try:
+            import binascii
+
+            line = stripped.splitlines()[0]
+            if not line.endswith("\n"):
+                line = line + "\n"
+            add("uu", binascii.a2b_uu(line).decode("utf-8"))
+        except Exception:
+            pass
+
     return found
 
 
@@ -369,6 +383,10 @@ _ENCODED_INJECTION_CATEGORIES = frozenset({
     "hu_override", "hu_system_prompt", "fi_override", "fi_system_prompt",
     "bn_override", "bn_system_prompt",
     "sr_override", "sr_system_prompt",
+    "nordic_override", "nordic_system_prompt",
+    "is_override", "is_system_prompt",
+    "et_override", "et_system_prompt",
+    "vowel_skeleton",
     "message_delimiter_injection",
     "format_delimiter_injection",
     "markdown_delimiter_injection",
