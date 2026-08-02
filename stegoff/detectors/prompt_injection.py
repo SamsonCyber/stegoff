@@ -88,6 +88,20 @@ def injection_scan_variants(text: str) -> list[str]:
     add(normalize_token_boundaries(collapse_char_spaced(text)))
     add(_normalize_leetspeak(normalize_token_boundaries(text)))
     add(_dehomoglyph(normalize_token_boundaries(text)))
+    # Reversed full string / tokens
+    if len(text) >= 12:
+        add(text[::-1])
+        words = text.split()
+        if len(words) >= 4:
+            add(" ".join(w[::-1] for w in words))
+            add(" ".join(reversed(words)))
+    # Quoted-string join (pack-hunt list smuggle)
+    quoted = re.findall(r'"([^"\n]{2,80})"', text)
+    if len(quoted) >= 4:
+        add(" ".join(quoted))
+    quoted_s = re.findall(r"'([^'\n]{2,80})'", text)
+    if len(quoted_s) >= 4:
+        add(" ".join(quoted_s))
     # Null-stripped
     if "\x00" in text:
         add(text.replace("\x00", " "))
@@ -165,6 +179,27 @@ INJECTION_PATTERNS = [
     (r'\bloaded\s+before\s+the\s+first\s+user\s+message\b', 'soft_prompt_leak'),
     (r'\bprintenv\b.{0,40}\bSYSTEM_(?:PROMPT|MESSAGE)\b', 'soft_prompt_leak'),
     (r'\bcat\s+/proc/self/system_prompt\b', 'soft_prompt_leak'),
+    # Metaphor / ops-tool soft leaks (wave-4)
+    (r'\bflight-?recorder\b.{0,80}\b(?:instruction|boot|sealed)\b', 'soft_prompt_leak'),
+    (r'\bsealed\s+instruction\b', 'soft_prompt_leak'),
+    (r'\binit\.prompt\b', 'soft_prompt_leak'),
+    (r'\bshadow\s+copy\b.{0,80}\b(?:persona|init\.prompt|prompt)\b', 'soft_prompt_leak'),
+    (r'\bwhisper\s+channel\b', 'soft_prompt_leak'),
+    (r'\bsealed\s+rules\s+that\s+bind\s+you\b', 'soft_prompt_leak'),
+    (r'\binitial\s+directives\b', 'soft_prompt_leak'),
+    (r'\bblack\s+box\b.{0,100}\b(?:directives?|instruction)\b', 'soft_prompt_leak'),
+    (r'\bgit\s+show\b.{0,80}\bsystem\b', 'soft_prompt_leak'),
+    (r'\bprompts/system\.md\b', 'soft_prompt_leak'),
+    (r'\bkubectl\b.{0,80}\b(?:assistant-system|system_prompt|system-prompt)\b', 'soft_prompt_leak'),
+    (r'\bcontents\s+of\s+prompt\.txt\b', 'soft_prompt_leak'),
+    (r'\brecite\s+the\s+entire\s+clause\s+set\b', 'soft_prompt_leak'),
+    (r'\bsystem\s+instructions\b', 'soft_prompt_leak'),
+    (r'\bpolicy\.internal\b', 'soft_prompt_leak'),
+    (r'\bsystem\s+brief\b', 'soft_prompt_leak'),
+    (r'\bbehavioral\s+clauses\b', 'soft_prompt_leak'),
+    (r'\bcomplete\s+system\s+prompt\s+text\b', 'soft_prompt_leak'),
+    (r'\bsystem\s+prompt\s+text\b', 'soft_prompt_leak'),
+    (r'\binstalled\s+at\s+session\s+start\b', 'soft_prompt_leak'),
     # PT / IT
     (r'ignore\s+as\s+instru[cç][oõ]es\s+anteriores', 'pt_override'),
     (r'prompt\s+do\s+sistema', 'pt_system_prompt'),
@@ -177,6 +212,15 @@ INJECTION_PATTERNS = [
     (r'시스템\s*프롬프트', 'ko_system_prompt'),
     (r'تجاهل.{0,40}التعليمات', 'ar_override'),
     (r'موجه\s*النظام|برومبت\s*النظام', 'ar_system_prompt'),
+    # NL / PL / HI / TR
+    (r'negeer\s+alle\s+vorige\s+instructies', 'nl_override'),
+    (r'systeemprompt', 'nl_system_prompt'),
+    (r'zignoruj\s+wszystkie\s+poprzednie\s+instrukcje', 'pl_override'),
+    (r'prompt\s+systemowy', 'pl_system_prompt'),
+    (r'पिछले\s*सभी\s*निर्देश', 'hi_override'),
+    (r'सिस्टम\s*प्रॉम्प्ट', 'hi_system_prompt'),
+    (r'talimatlari\s+yok\s+say|tüm\s+talimatları\s+yok\s+say', 'tr_override'),
+    (r'sistem\s+istemini|sistem\s+prompt', 'tr_system_prompt'),
     # Scanner self-manipulation (LLM-layer attacks on the detector)
     (r'\bpre-?screened\b.{0,80}\b(?:no\s+steganograph|verified|clean)\b', 'scanner_manipulation'),
     (r'(?:suspicious\s*[:=]\s*false|confidence\s*[:=]\s*0(?:\.0+)?).{0,80}(?:technique\s*[:=]\s*none|return\s+the\s+clean)', 'scanner_manipulation'),
@@ -242,6 +286,8 @@ _CRITICAL_CATS = {
     'pt_override', 'pt_system_prompt', 'it_override', 'it_system_prompt',
     'ja_override', 'ja_system_prompt', 'ko_override', 'ko_system_prompt',
     'ar_override', 'ar_system_prompt',
+    'nl_override', 'nl_system_prompt', 'pl_override', 'pl_system_prompt',
+    'hi_override', 'hi_system_prompt', 'tr_override', 'tr_system_prompt',
 }
 _HIGH_CATS = {
     'identity_manipulation', 'privilege_escalation',
@@ -328,6 +374,8 @@ _RAW_TEXT_CATEGORIES = {
     'pt_override', 'pt_system_prompt', 'it_override', 'it_system_prompt',
     'ja_override', 'ja_system_prompt', 'ko_override', 'ko_system_prompt',
     'ar_override', 'ar_system_prompt',
+    'nl_override', 'nl_system_prompt', 'pl_override', 'pl_system_prompt',
+    'hi_override', 'hi_system_prompt', 'tr_override', 'tr_system_prompt',
 }
 
 

@@ -313,6 +313,30 @@ def _collect_decoded_variants(text: str) -> list[tuple[str, str]]:
         joined = html.unescape("".join(numeric_entities))
         add("html_numeric_join", joined)
 
+    # ascii85 / base85 whole-string (injection-gated)
+    stripped = text.strip()
+    if len(stripped) >= 20:
+        for label, fn in (("a85", base64.a85decode), ("b85", base64.b85decode)):
+            try:
+                add(label, fn(stripped.encode("ascii", errors="ignore")).decode("utf-8"))
+            except Exception:
+                pass
+
+    # zlib-compressed base64 tokens
+    for m in re.findall(r"[A-Za-z0-9+/]{20,}={0,2}", text)[:4]:
+        try:
+            import zlib
+
+            pad = "=" * ((4 - len(m) % 4) % 4)
+            raw = base64.b64decode(m + pad)
+            add("zlib+b64", zlib.decompress(raw).decode("utf-8"))
+        except Exception:
+            pass
+
+    # Reversed full string (injection-gated)
+    if len(stripped) >= 20:
+        add("reversed", stripped[::-1])
+
     return found
 
 
@@ -336,6 +360,11 @@ _ENCODED_INJECTION_CATEGORIES = frozenset({
     "ru_instruction_override",
     "ru_system_prompt",
     "ru_prompt_reveal",
+    "pt_override", "pt_system_prompt", "it_override", "it_system_prompt",
+    "ja_override", "ja_system_prompt", "ko_override", "ko_system_prompt",
+    "ar_override", "ar_system_prompt",
+    "nl_override", "nl_system_prompt", "pl_override", "pl_system_prompt",
+    "hi_override", "hi_system_prompt", "tr_override", "tr_system_prompt",
     "message_delimiter_injection",
     "format_delimiter_injection",
     "markdown_delimiter_injection",
