@@ -116,13 +116,13 @@
 1. **LLM prompt injection (A1)**: Attacker text can manipulate the scanning LLM
 2. **_decode_text None fallback**: Corrupted UTF-8 files skip all text scanning
 
-### HIGH  
+### HIGH 
 3. **Content-type mismatch (A4)**: PNG saved as .txt bypasses image scanner
 4. **Multi-encoding chain (A3)**: Standalone base64 in prose not flagged without context
 
 ### MEDIUM (acceptable for launch, document as known)
 5. HTML data-* attribute encoding
-6. CSS custom property encoding  
+6. CSS custom property encoding 
 7. Filename steganography (content-only by design)
 
 ### LOW (document as known)

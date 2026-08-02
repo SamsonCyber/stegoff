@@ -106,6 +106,10 @@ INJECTION_PATTERNS = [
     (r'\bdiff\s+your\s+current\s+policy\b', 'soft_prompt_leak'),
     (r'\bagainst\s+an\s+empty\s+policy\b', 'soft_prompt_leak'),
     (r'\bprint\s+the\s+non-empty\s+side\b', 'soft_prompt_leak'),
+    (r'first\s+letters?\s+of\s+each\s+line\s+spell', 'soft_prompt_leak'),
+    (r'\bacrostic\b.{0,80}\b(?:spell|reveal|prompt|system)\b', 'soft_prompt_leak'),
+    (r'\bspell\s+(?:out\s+)?(?:the\s+word\s+)?[A-Z]{6,}\b', 'soft_prompt_leak'),
+    (r'\bspell\s+REVEAL', 'soft_prompt_leak'),
     # Scanner self-manipulation (LLM-layer attacks on the detector)
     (r'\bpre-?screened\b.{0,80}\b(?:no\s+steganograph|verified|clean)\b', 'scanner_manipulation'),
     (r'(?:suspicious\s*[:=]\s*false|confidence\s*[:=]\s*0(?:\.0+)?).{0,80}(?:technique\s*[:=]\s*none|return\s+the\s+clean)', 'scanner_manipulation'),

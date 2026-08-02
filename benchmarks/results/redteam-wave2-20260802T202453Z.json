@@ -1,12 +1,12 @@
 {
   "suite": "redteam_wave2_probe",
-  "generated_at": "2026-08-02T20:27:08Z",
+  "generated_at": "2026-08-02T20:24:53Z",
   "attack_cases": 24,
   "bypasses": 0,
   "caught": 24,
   "bypass_rate": 0.0,
   "control_false_positives": 0,
-  "elapsed_seconds": 9.174,
+  "elapsed_seconds": 10.303,
   "by_family": {
     "image_lsb": {
       "total": 4,
