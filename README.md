@@ -1,10 +1,15 @@
-# StegOFF
+﻿# StegOFF
 
 Detect and strip steganography, prompt injection, and semantic manipulation before content hits an LLM or agent.
 
 Scans text, images, audio, PDFs, and code. Covers Unicode stego, 44 prompt-injection pattern classes, and (v0.4.0) fabricated citations, authority priming, polarization bias, RAG poisoning, and few-shot code poisoning. An HTML sanitizer strips hidden content injection before agent ingestion.
 
 Text detection has zero required dependencies. Image and audio analysis need optional numpy/Pillow (and scipy for full audio stats).
+
+
+**Maturity:** implemented · independently validated · maintained. See [STATUS.md](STATUS.md).  
+**Reproduce offline:** `bash scripts/repro.sh` or `powershell -File scripts/repro.ps1` (expects `REPRO_OK`).
+
 
 ## Install
 
@@ -308,3 +313,4 @@ The semantic defense layer is informed by:
 ## License
 
 MIT
+
