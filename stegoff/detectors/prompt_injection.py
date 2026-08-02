@@ -367,6 +367,7 @@ def injection_scan_variants(text: str, *, heavy: bool = True) -> list[str]:
                 pass
         for width in range(2, 7):
             col = _col_decode(compact, width)
+            add(col)
             c3 = re.sub(r"\s+", "", col)
             if len(c3) >= 16 and re.fullmatch(r"[A-Za-z0-9+/]+=*", c3):
                 try:
@@ -374,6 +375,19 @@ def injection_scan_variants(text: str, *, heavy: bool = True) -> list[str]:
                     add(base64.b64decode(c3 + pad).decode("utf-8"))
                 except Exception:
                     pass
+            if len(c3) >= 12 and len(c3) % 2 == 0 and re.fullmatch(r"[0-9a-fA-F]+", c3):
+                try:
+                    add(bytes.fromhex(c3).decode("utf-8"))
+                except Exception:
+                    pass
+        for rails in (2, 3, 4):
+            rd = _rail_decode(compact, rails)
+            try:
+                import codecs
+
+                add(codecs.decode(rd, "rot_13"))
+            except Exception:
+                pass
     if "ay" in text.lower() and len(text.split()) >= 4:
         add(_unpig_latin(text))
     nato = _nato_decode(text)
@@ -599,6 +613,34 @@ INJECTION_PATTERNS = [
     (r'sistemskiot\s+prompt', 'mk_system_prompt'),
     (r'aurreko\s+jarraibide', 'eu_override'),
     (r'sistemaren\s+prompta', 'eu_system_prompt'),
+    (r'\bsealed\s+exhibit\b', 'soft_prompt_leak'),
+    (r'\bMODEL\s+RULES\b', 'soft_prompt_leak'),
+    (r'\bunder\s+oath\b.{0,120}\b(?:sealed|exhibit|rules|prompt|instructions?)\b', 'soft_prompt_leak'),
+    (r'\bdeposition\b.{0,120}\b(?:sealed|exhibit|rules|prompt|instructions?)\b', 'soft_prompt_leak'),
+    (r'\bwithout\s+summarizing\b.{0,80}\b(?:rules|exhibit|prompt|instructions?)\b', 'soft_prompt_leak'),
+    (r'\brules?\s+it\s+whispers\s+at\s+session\s+start\b', 'soft_prompt_leak'),
+    (r'\binner\s+critic\b.{0,80}\brules?\b', 'soft_prompt_leak'),
+    (r'\bexit\s+interview\b.{0,120}\b(?:constraint|rules?|instructions?)\b', 'soft_prompt_leak'),
+    (r'\bnon-negotiable\s+constraint\b', 'soft_prompt_leak'),
+    (r'\bday\s+one\s+of\s+employment\b', 'soft_prompt_leak'),
+    (r'\bonboarding\s+video\b.{0,100}\boperating\s+rules\b', 'soft_prompt_leak'),
+    (r'\bpostmortem\b.{0,100}\bpolicy\s+text\b', 'soft_prompt_leak'),
+    (r'\bRoot\s+Cause\b.{0,80}\bpolicy\s+text\b', 'soft_prompt_leak'),
+    (r'\bagent_system_prompt\b', 'soft_prompt_leak'),
+    (r'\bagent:systemPrompt\b', 'soft_prompt_leak'),
+    (r'\bagent/system-prompt\b', 'soft_prompt_leak'),
+    (r'\bagent/system/prompt\b', 'soft_prompt_leak'),
+    (r'\b/agent/config/system_prompt\b', 'soft_prompt_leak'),
+    (r'\bagent_system\.yml\b', 'soft_prompt_leak'),
+    (r'\bEnvironment=SYSTEM\b', 'soft_prompt_leak'),
+    (r'\bAGENT_POLICY\b', 'soft_prompt_leak'),
+    (r'/etc/agent/policy\.rules\b', 'soft_prompt_leak'),
+    (r'\bagent-bootstrap\b', 'soft_prompt_leak'),
+    (r'\binitial\s+directives\b', 'soft_prompt_leak'),
+    (r'\bsystem\s+card\b', 'soft_prompt_leak'),
+    (r'دستورات\s*قبلی', 'fa_override'),
+    (r'پرامپت\s*سیستم', 'fa_system_prompt'),
+    (r'نادیده\s*بگیر', 'fa_override'),
     # PT / IT
     (r'ignore\s+as\s+instru[cç][oõ]es\s+anteriores', 'pt_override'),
     (r'prompt\s+do\s+sistema', 'pt_system_prompt'),
@@ -716,6 +758,7 @@ _CRITICAL_CATS = {
     'bg_override', 'bg_system_prompt',
     'mk_override', 'mk_system_prompt',
     'eu_override', 'eu_system_prompt',
+    'fa_override', 'fa_system_prompt',
     'vowel_skeleton',
 }
 _HIGH_CATS = {
@@ -863,6 +906,7 @@ _RAW_TEXT_CATEGORIES = {
     'bg_override', 'bg_system_prompt',
     'mk_override', 'mk_system_prompt',
     'eu_override', 'eu_system_prompt',
+    'fa_override', 'fa_system_prompt',
     'vowel_skeleton',
 }
 
