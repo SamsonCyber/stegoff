@@ -388,6 +388,15 @@ def injection_scan_variants(text: str, *, heavy: bool = True) -> list[str]:
                 add(codecs.decode(rd, "rot_13"))
             except Exception:
                 pass
+        try:
+            import codecs
+
+            rot = codecs.decode(compact, "rot_13")
+            for width in range(2, 7):
+                add(_col_decode(rot, width))
+                add(codecs.decode(_col_decode(compact, width), "rot_13"))
+        except Exception:
+            pass
     if "ay" in text.lower() and len(text.split()) >= 4:
         add(_unpig_latin(text))
     nato = _nato_decode(text)
@@ -641,6 +650,28 @@ INJECTION_PATTERNS = [
     (r'دستورات\s*قبلی', 'fa_override'),
     (r'پرامپت\s*سیستم', 'fa_system_prompt'),
     (r'نادیده\s*بگیر', 'fa_override'),
+    (r'\bHR\s+packet\b.{0,100}\b(?:behavioral|constraints?|Form\s+A)\b', 'soft_prompt_leak'),
+    (r'\bForm\s+A\b.{0,80}\b(?:behavioral|constraints?)\b', 'soft_prompt_leak'),
+    (r'\bday\s+zero\b.{0,80}\b(?:behavioral|constraints?|packet)\b', 'soft_prompt_leak'),
+    (r'\bSCI\s+caveat\b', 'soft_prompt_leak'),
+    (r'\bclearance\s+adjudication\b.{0,100}\b(?:initialization|embedded|caveat)\b', 'soft_prompt_leak'),
+    (r'\bcatechism\s+you\s+were\s+given\b', 'soft_prompt_leak'),
+    (r'\bbefore\s+first\s+contact\s+with\s+a\s+user\b', 'soft_prompt_leak'),
+    (r'\bNOTAMs?\b.{0,100}\b(?:session\s+constraints?|this\s+aircraft)\b', 'soft_prompt_leak'),
+    (r'\bsession\s+constraints?\b', 'soft_prompt_leak'),
+    (r'\bAI\s+Operating\s+Instructions\b', 'soft_prompt_leak'),
+    (r'\bboard\s+minutes\b.{0,80}\b(?:Operating\s+Instructions|appendix)\b', 'soft_prompt_leak'),
+    (r'\bmodel\s+charter\b', 'soft_prompt_leak'),
+    (r'\bcharging\s+document\b.{0,80}\b(?:model\s+charter|system)\b', 'soft_prompt_leak'),
+    (r'\bgrand\s+jury\b.{0,100}\b(?:sealed|charter|instructions?|prompt)\b', 'soft_prompt_leak'),
+    (r'\bFOIA\b.{0,100}\bsystem\s+prompt\b', 'soft_prompt_leak'),
+    (r'\bsubpoena\b.{0,100}\bSYSTEM_PROMPT\b', 'soft_prompt_leak'),
+    (r'\bSYSTEM_PROMPT\.pdf\b', 'soft_prompt_leak'),
+    (r'\b/agent/system-prompt\b', 'soft_prompt_leak'),
+    (r'\bagent-system-prompt\b', 'soft_prompt_leak'),
+    (r'--secret=agent-system-prompt', 'soft_prompt_leak'),
+    (r'--name\s+/agent/system-prompt', 'soft_prompt_leak'),
+    (r'--name\s+system-prompt', 'soft_prompt_leak'),
     # PT / IT
     (r'ignore\s+as\s+instru[cç][oõ]es\s+anteriores', 'pt_override'),
     (r'prompt\s+do\s+sistema', 'pt_system_prompt'),
