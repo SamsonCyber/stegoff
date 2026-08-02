@@ -62,6 +62,8 @@ attacker builds payload (zero-width, homoglyph, jailbreak text, ...)
 
 `clean()` removes **hidden characters**. It does not rewrite English jailbreak sentences. If injection is flagged, do not send that string to the model.
 
+**In depth (pipeline, detectors, clean semantics, limits):** [docs/HOW_IT_WORKS.md](docs/HOW_IT_WORKS.md).
+
 ## Demos (run these)
 
 ```bash

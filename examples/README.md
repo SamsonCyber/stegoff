@@ -2,7 +2,9 @@
 
 Runnable demos. Text only. No network.
 
-## How it works
+For the full pipeline (orchestrator steps, detector catalog, clean semantics, file routing, severity, anti-patterns): **[docs/HOW_IT_WORKS.md](../docs/HOW_IT_WORKS.md)**.
+
+## How it works (short)
 
 ```text
 attacker builds payload
@@ -29,6 +31,17 @@ attacker builds payload
 | Gate a handler | `@steg_guard` | `stegoff guard` on stdin |
 
 `clean()` removes **hidden characters**. It does not rewrite English jailbreaks. Injection findings mean "do not send this to the model," not "rewrite the sentence."
+
+### Text scan order (what `check` runs on a string)
+
+1. HTML-entity decode + re-scan  
+2. Base64 multi-decode → injection only if decoded text looks hostile  
+3. Unicode stego detectors (zero-width, tags, homoglyphs, bidi, …)  
+4. Decoded stego payloads re-checked for injection  
+5. Structural JSON / comment helpers  
+6. Raw prompt-injection regex bank (incl. light leetspeak fold)  
+7. Authority + polarization heuristics + semantic ML classifier  
+8. Optional `use_llm=True` L2 (off by default)
 
 ## Run the main demo
 
