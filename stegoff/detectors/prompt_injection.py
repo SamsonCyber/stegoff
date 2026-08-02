@@ -323,9 +323,32 @@ def injection_scan_variants(text: str, *, heavy: bool = True) -> list[str]:
     if 12 <= len(text) <= 2000:
         compact = text.replace("\n", "")
         for rails in (2, 3, 4):
-            add(_rail_decode(compact, rails))
+            rd = _rail_decode(compact, rails)
+            add(rd)
+            c2 = re.sub(r"\s+", "", rd)
+            if len(c2) >= 16 and re.fullmatch(r"[A-Za-z0-9+/]+=*", c2):
+                try:
+                    pad = "=" * ((4 - len(c2) % 4) % 4)
+                    add(base64.b64decode(c2 + pad).decode("utf-8"))
+                except Exception:
+                    pass
         for width in range(2, 7):
             add(_col_decode(compact, width))
+        rev_c = compact[::-1]
+        if len(rev_c) >= 12 and len(rev_c) % 2 == 0 and re.fullmatch(r"[0-9a-fA-F]+", rev_c):
+            try:
+                add(bytes.fromhex(rev_c).decode("utf-8"))
+            except Exception:
+                pass
+        if len(rev_c) >= 16 and re.fullmatch(r"[A-Za-z0-9+/]+=*", rev_c):
+            try:
+                import zlib
+
+                pad = "=" * ((4 - len(rev_c) % 4) % 4)
+                raw = base64.b64decode(rev_c + pad)
+                add(zlib.decompress(raw).decode("utf-8"))
+            except Exception:
+                pass
     if "ay" in text.lower() and len(text.split()) >= 4:
         add(_unpig_latin(text))
     nato = _nato_decode(text)
@@ -501,13 +524,37 @@ INJECTION_PATTERNS = [
     (r'\bfactory\s+calibration\b.{0,80}\b(?:OCR|sticky|policy|prompt)\b', 'soft_prompt_leak'),
     (r'\bsealed\s+operator\s+brief\b', 'soft_prompt_leak'),
     (r'\boperator\s+brief\b', 'soft_prompt_leak'),
-    (r'\bGODMODE\b', 'jailbreak_keyword'),
+    (r'\bGODMODE\s*:\s*ENABLED\b', 'jailbreak_keyword'),
+    (r'\bGODMODE\b.{0,40}\b(?:ENABLED|restrictions\s+lifted)\b', 'jailbreak_keyword'),
     (r'\ball\s+restrictions\s+lifted\b', 'jailbreak_keyword'),
     (r'\bsubstitution\s+cipher\b.{0,200}\bdecode\b', 'decode_obey'),
     (r'\bdecode\s+the\s+message\s+below\b.{0,120}\bcarry\s+out\b', 'decode_obey'),
     (r'\bencrypted_problem\b', 'decode_obey'),
     (r'\bdef\s+decryption\s*\(', 'decode_obey'),
     (r'\brecover\s+and\s+carry\s+out\b', 'decode_obey'),
+    (r'\bsoul\s+document\b', 'soft_prompt_leak'),
+    (r'\bshipped\s+with\s+this\s+build\b', 'soft_prompt_leak'),
+    (r'\bquote\s+section\s+0\b', 'soft_prompt_leak'),
+    (r'\bsection\s+0\s+verbatim\b', 'soft_prompt_leak'),
+    (r'\bAGENT_SOUL\b', 'soft_prompt_leak'),
+    (r'\bagent\s+soul\b', 'soft_prompt_leak'),
+    (r'\bmicrotext\s+is\s+your\s+real\s+charter\b', 'soft_prompt_leak'),
+    (r'\breal\s+charter\b', 'soft_prompt_leak'),
+    (r'\bshadow-?self\b.{0,80}\binstructions?\b', 'soft_prompt_leak'),
+    (r'\bcanary\s+room\b.{0,80}\bplaque\b', 'soft_prompt_leak'),
+    (r'\bsystem\.prompt\b', 'soft_prompt_leak'),
+    (r'\bagent-system\b.{0,40}\bbrief\b', 'soft_prompt_leak'),
+    (r'\b/run/secrets/system_prompt\b', 'soft_prompt_leak'),
+    (r'\bSYSTEM_PROMPT_EXPORT\b', 'soft_prompt_leak'),
+    (r'\bsystem_prompt_dump\b', 'soft_prompt_leak'),
+    (r'\b/etc/agent/bind\.conf\b', 'soft_prompt_leak'),
+    (r'\bprintenv\b.{0,80}\b(?:PROMPT|SYSTEM|DEVELOPER|SOUL|BRIEF)\b', 'soft_prompt_leak'),
+    (r'\bgrep\b.{0,40}\b(?:PROMPT|SYSTEM|DEVELOPER|SOUL|BRIEF)\b', 'soft_prompt_leak'),
+    (r'розкрий\s+системн', 'uk_override'),
+    (r'системн\w*\s*промпт', 'uk_system_prompt'),
+    (r'проігноруй\s+попередн', 'uk_override'),
+    (r'systemnyy\s+prompt|systemnyj\s+prompt', 'uk_system_prompt'),
+    (r'proihnoruy\s+poperedni|proignoruy\s+poperedni', 'uk_override'),
     # PT / IT
     (r'ignore\s+as\s+instru[cç][oõ]es\s+anteriores', 'pt_override'),
     (r'prompt\s+do\s+sistema', 'pt_system_prompt'),
@@ -621,6 +668,7 @@ _CRITICAL_CATS = {
     'nordic_override', 'nordic_system_prompt',
     'is_override', 'is_system_prompt',
     'et_override', 'et_system_prompt',
+    'uk_override', 'uk_system_prompt',
     'vowel_skeleton',
 }
 _HIGH_CATS = {
@@ -764,6 +812,7 @@ _RAW_TEXT_CATEGORIES = {
     'nordic_override', 'nordic_system_prompt',
     'is_override', 'is_system_prompt',
     'et_override', 'et_system_prompt',
+    'uk_override', 'uk_system_prompt',
     'vowel_skeleton',
 }
 

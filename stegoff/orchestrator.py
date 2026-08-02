@@ -387,6 +387,7 @@ _ENCODED_INJECTION_CATEGORIES = frozenset({
     "nordic_override", "nordic_system_prompt",
     "is_override", "is_system_prompt",
     "et_override", "et_system_prompt",
+    "uk_override", "uk_system_prompt",
     "vowel_skeleton",
     "message_delimiter_injection",
     "format_delimiter_injection",
