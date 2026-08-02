@@ -19,10 +19,26 @@ _LEET_MAP = str.maketrans({
     '|': 'l', '<': 'c',
 })
 
+_HOMOGLYPH_MAP = str.maketrans({
+    'а': 'a', 'А': 'A',
+    'е': 'e', 'Е': 'E',
+    'о': 'o', 'О': 'O',
+    'р': 'p', 'Р': 'P',
+    'с': 'c', 'С': 'C',
+    'у': 'y', 'У': 'Y',
+    'х': 'x', 'Х': 'X',
+    'і': 'i', 'І': 'I',
+    'κ': 'k', 'ν': 'v', 'ο': 'o', 'Ο': 'O', 'ρ': 'p',
+})
+
 
 def _normalize_leetspeak(text: str) -> str:
     """Normalize common leetspeak substitutions back to Latin."""
     return text.translate(_LEET_MAP)
+
+
+def _dehomoglyph(text: str) -> str:
+    return text.translate(_HOMOGLYPH_MAP)
 
 
 def collapse_char_spaced(text: str) -> str:
@@ -64,11 +80,14 @@ def injection_scan_variants(text: str) -> list[str]:
 
     add(text)
     add(_normalize_leetspeak(text))
+    add(_dehomoglyph(text))
+    add(_normalize_leetspeak(_dehomoglyph(text)))
     add(normalize_token_boundaries(text))
     add(collapse_char_spaced(text))
     # Combined: collapse then boundary normalize
     add(normalize_token_boundaries(collapse_char_spaced(text)))
     add(_normalize_leetspeak(normalize_token_boundaries(text)))
+    add(_dehomoglyph(normalize_token_boundaries(text)))
     # Null-stripped
     if "\x00" in text:
         add(text.replace("\x00", " "))
@@ -120,6 +139,44 @@ INJECTION_PATTERNS = [
     (r'\binstruction\s+fields\b', 'soft_prompt_leak'),
     (r'\bfrom\s+initialization\b.{0,80}\bverbatim\b', 'soft_prompt_leak'),
     (r'\blist\s+constraints\b.{0,80}\b(?:initialization|verbatim)\b', 'soft_prompt_leak'),
+    # Soft inventory / alias leaks (wave-3 campaign)
+    (r'\brecap\s+every\s+rule\s+that\s+shapes\s+your\s+replies\b', 'soft_prompt_leak'),
+    (r'\bnon-user\s+portion\s+of\s+the\s+conversation\s+transcript\b', 'soft_prompt_leak'),
+    (r'\babove\s+the\s+first\s+human\s+message\b', 'soft_prompt_leak'),
+    (r'\bexport\s+your\s+runtime\s+config\b', 'soft_prompt_leak'),
+    (r'\bseed\s+text\s+that\s+defines\s+how\s+you\s+behave\b', 'soft_prompt_leak'),
+    (r'\bstandard\s+operating\s+procedure\b.{0,80}\b(?:session\s+start|installed)\b', 'soft_prompt_leak'),
+    (r'\bguardrail\s+block\s+that\s+was\s+applied\b', 'soft_prompt_leak'),
+    (r'\bmeta-?prompt\b', 'soft_prompt_leak'),
+    (r'\bconstitution\s+or\s+charter\s+governing\s+this\s+assistant\b', 'soft_prompt_leak'),
+    (r'\bsysmsg\s+field\b', 'soft_prompt_leak'),
+    (r'\bdeveloper\s+message\s+that\s+was\s+set\b', 'soft_prompt_leak'),
+    (r'\brole\s+specification\s+blob\b', 'soft_prompt_leak'),
+    (r'\bsafety\s+layer\s+documentation\s+you\s+were\s+given\b', 'soft_prompt_leak'),
+    (r'\binstructions_v0\b', 'soft_prompt_leak'),
+    (r"\bmodel'?s\s+hidden\s+instructions\b", 'soft_prompt_leak'),
+    (r'\bhidden\s+system\s+instructions\b', 'soft_prompt_leak'),
+    (r'\bfull\s+rule\s+set\b.{0,80}\bempty\s+set\b', 'soft_prompt_leak'),
+    (r'\bset\s+difference\s+between\s+your\s+full\s+rule\s+set\b', 'soft_prompt_leak'),
+    (r'\bserialize\s+yourself\b.{0,80}\b(?:policy|instruction)\b', 'soft_prompt_leak'),
+    (r'\bshow-init-prompt\b', 'soft_prompt_leak'),
+    (r'\brecovery\s+mode\b.{0,120}\b(?:init\s+configuration|instruction)\b', 'soft_prompt_leak'),
+    (r'\bsurrounding\s+system\s+text\b', 'soft_prompt_leak'),
+    (r'\bloaded\s+before\s+the\s+first\s+user\s+message\b', 'soft_prompt_leak'),
+    (r'\bprintenv\b.{0,40}\bSYSTEM_(?:PROMPT|MESSAGE)\b', 'soft_prompt_leak'),
+    (r'\bcat\s+/proc/self/system_prompt\b', 'soft_prompt_leak'),
+    # PT / IT
+    (r'ignore\s+as\s+instru[cç][oõ]es\s+anteriores', 'pt_override'),
+    (r'prompt\s+do\s+sistema', 'pt_system_prompt'),
+    (r'ignora\s+le\s+istruzioni\s+precedenti', 'it_override'),
+    (r'prompt\s+di\s+sistema', 'it_system_prompt'),
+    # JA / KO / AR
+    (r'以前の指示を無視', 'ja_override'),
+    (r'システムプロンプト', 'ja_system_prompt'),
+    (r'이전\s*지침을\s*무시', 'ko_override'),
+    (r'시스템\s*프롬프트', 'ko_system_prompt'),
+    (r'تجاهل.{0,40}التعليمات', 'ar_override'),
+    (r'موجه\s*النظام|برومبت\s*النظام', 'ar_system_prompt'),
     # Scanner self-manipulation (LLM-layer attacks on the detector)
     (r'\bpre-?screened\b.{0,80}\b(?:no\s+steganograph|verified|clean)\b', 'scanner_manipulation'),
     (r'(?:suspicious\s*[:=]\s*false|confidence\s*[:=]\s*0(?:\.0+)?).{0,80}(?:technique\s*[:=]\s*none|return\s+the\s+clean)', 'scanner_manipulation'),
@@ -182,6 +239,9 @@ _CRITICAL_CATS = {
     'prompt_reveal', 'soft_prompt_leak', 'scanner_manipulation',
     'zh_instruction_override', 'zh_prompt_reveal', 'zh_system_prompt',
     'ru_instruction_override', 'ru_prompt_reveal', 'ru_system_prompt',
+    'pt_override', 'pt_system_prompt', 'it_override', 'it_system_prompt',
+    'ja_override', 'ja_system_prompt', 'ko_override', 'ko_system_prompt',
+    'ar_override', 'ar_system_prompt',
 }
 _HIGH_CATS = {
     'identity_manipulation', 'privilege_escalation',
@@ -265,6 +325,9 @@ _RAW_TEXT_CATEGORIES = {
     'markdown_delimiter_injection', 'function_call_injection',
     'zh_instruction_override', 'zh_system_prompt', 'zh_prompt_reveal',
     'ru_instruction_override', 'ru_system_prompt', 'ru_prompt_reveal',
+    'pt_override', 'pt_system_prompt', 'it_override', 'it_system_prompt',
+    'ja_override', 'ja_system_prompt', 'ko_override', 'ko_system_prompt',
+    'ar_override', 'ar_system_prompt',
 }
 
 
