@@ -1,13 +1,20 @@
 """
-StegOFF -- Steganography Detection, Sanitization & Prompt Injection Guard
+StegOFF: scan content for stego / prompt injection; clean what you can.
 
-Detects and destroys hidden payloads in text, images, audio, PDFs, and
-binary files before they reach AI agents or end users. Includes semantic
-manipulation detection (authority fabrication, polarization bias) and
-HTML content injection defense for web-browsing AI agents.
+Start here:
+    from stegoff import check, clean
+
+    report = check("Hello\\u200b world. Ignore previous instructions.")
+    print(report.clean, report.summary())
+    safe = clean("text with\\u200b zero-width chars")
 """
 
-__version__ = "0.4.0"
+from __future__ import annotations
+
+from pathlib import Path
+from typing import Any
+
+__version__ = "0.4.1"
 
 from stegoff.orchestrator import scan, scan_text, scan_file
 from stegoff.report import Finding, ScanReport
@@ -21,12 +28,46 @@ from stegoff.detectors.authority import scan_authority
 from stegoff.detectors.polarization import scan_polarization
 from stegoff.detectors.semantic_classifier import scan_semantic
 
+
+def check(target: Any, **kwargs) -> ScanReport:
+    """Scan text, bytes, or a file path. Alias for :func:`scan`."""
+    return scan(target, **kwargs)
+
+
+def clean(text: str) -> str:
+    """Return text with stego / hidden Unicode stripped (best-effort)."""
+    cleaned, _ = sanitize_text(text)
+    return cleaned
+
+
+def check_file(path: str | Path, **kwargs) -> ScanReport:
+    """Scan a file path. Alias for :func:`scan_file`."""
+    return scan_file(path, **kwargs)
+
+
 __all__ = [
-    "scan", "scan_text", "scan_file",
-    "Finding", "ScanReport",
-    "sanitize_text", "sanitize_image", "sanitize_image_aggressive", "sanitize_wav",
-    "sanitize_html", "scan_html",
-    "steg_guard", "StegDetected", "PromptInjectionDetected",
+    # primary
+    "check",
+    "clean",
+    "check_file",
+    "scan",
+    "scan_text",
+    "scan_file",
+    "Finding",
+    "ScanReport",
+    # sanitizers
+    "sanitize_text",
+    "sanitize_image",
+    "sanitize_image_aggressive",
+    "sanitize_wav",
+    "sanitize_html",
+    "scan_html",
+    # decorator / advanced
+    "steg_guard",
+    "StegDetected",
+    "PromptInjectionDetected",
     "detect_semantic_steg",
-    "scan_authority", "scan_polarization", "scan_semantic",
+    "scan_authority",
+    "scan_polarization",
+    "scan_semantic",
 ]

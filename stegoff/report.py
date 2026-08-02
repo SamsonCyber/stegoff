@@ -132,18 +132,24 @@ class ScanReport:
         return json.dumps(self.to_dict(), indent=indent, ensure_ascii=False)
 
     def summary(self) -> str:
+        """Human-readable one-block summary for CLI and logs."""
         if self.clean:
-            return f"[CLEAN] {self.target} — no steganography detected"
+            return f"[CLEAN] {self.target}: no findings"
         lines = [
-            f"[{self.highest_severity.name}] {self.target} — "
-            f"{self.finding_count} finding(s) detected"
+            f"[{self.highest_severity.name}] {self.target}: "
+            f"{self.finding_count} finding(s)"
         ]
         if self.prompt_injection_detected:
-            lines.append("  ⚠ PROMPT INJECTION PAYLOAD DETECTED")
+            lines.append("  PROMPT INJECTION detected")
+        if self.semantic_manipulation_detected:
+            lines.append("  SEMANTIC MANIPULATION detected")
         for f in self.findings:
+            method = (
+                f.method.value if hasattr(f.method, "value") else str(f.method)
+            )
             lines.append(
-                f"  [{f.severity.name}] {f.method.value} "
-                f"(confidence: {f.confidence:.0%}) — {f.description}"
+                f"  [{f.severity.name}] {method} "
+                f"({f.confidence:.0%}) - {f.description}"
             )
             if f.decoded_payload:
                 preview = f.decoded_payload[:120]
@@ -151,3 +157,12 @@ class ScanReport:
                     preview += "..."
                 lines.append(f"    payload: {preview}")
         return "\n".join(lines)
+
+    def brief(self) -> str:
+        """One-line result for scripts."""
+        if self.clean:
+            return f"CLEAN {self.target}"
+        return (
+            f"{self.highest_severity.name} {self.target} "
+            f"findings={self.finding_count}"
+        )

@@ -2,7 +2,7 @@
 
 | Axis | State |
 |------|--------|
-| Implemented | Yes. Installable package (`pip install -e .`) with CLI and library API. |
+| Implemented | Yes. Installable package with simple CLI (`stegoff <file|text>`) and `check` / `clean` API. |
 | Independently validated | Yes. Offline pytest suite runs without lab hosts or API keys. |
 | Maintained | Yes. Public under [SamsonCyber/stegoff](https://github.com/SamsonCyber/stegoff). |
 

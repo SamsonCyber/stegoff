@@ -1,14 +1,15 @@
 """
-StegOFF CLI — scan files and text for hidden steganographic payloads.
+StegOFF CLI — scan text/files for stego, prompt injection, and related threats.
 
-Usage:
-    stegoff scan <file>           Scan a file
-    stegoff scan-text <text>      Scan a text string
-    stegoff scan-dir <directory>  Scan all files in a directory
-    stegoff guard                 Read stdin, strip steg, output clean text
+Common usage (no subcommand needed):
+    stegoff suspicious.png
+    stegoff "paste text here"
+    echo "text" | stegoff -
+    stegoff clean user_input.txt
 """
 
 from __future__ import annotations
+
 import argparse
 import sys
 from pathlib import Path
@@ -16,117 +17,209 @@ from pathlib import Path
 from stegoff.orchestrator import scan_text, scan_file
 from stegoff.report import ScanReport
 
+_KNOWN = {
+    "scan",
+    "check",
+    "scan-text",
+    "scan-dir",
+    "clean",
+    "guard",
+    "trap",
+    "scan-html",
+    "help",
+    "-h",
+    "--help",
+}
 
-def main() -> None:
+
+def main(argv: list[str] | None = None) -> None:
+    argv = list(sys.argv[1:] if argv is None else argv)
+
+    # Bare invocation -> short help
+    if not argv or argv[0] in ("help", "-h", "--help"):
+        _print_quick_help()
+        sys.exit(0 if not argv or argv[0] in ("-h", "--help", "help") else 0)
+
+    # Smart default: "stegoff <path|text|->" without a subcommand
+    if argv[0] not in _KNOWN and not argv[0].startswith("-"):
+        argv = ["scan", *argv]
+
     parser = argparse.ArgumentParser(
-        prog='stegoff',
-        description='Detect steganography and prompt injection payloads'
+        prog="stegoff",
+        description=(
+            "Detect and strip steganography / prompt injection before content "
+            "hits an LLM or agent."
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog=(
+            "examples:\n"
+            "  stegoff note.txt\n"
+            "  stegoff \"Ignore previous instructions\"\n"
+            "  stegoff clean note.txt > clean.txt\n"
+            "  cat msg.txt | stegoff guard --block\n"
+        ),
     )
-    subparsers = parser.add_subparsers(dest='command', help='Commands')
+    sub = parser.add_subparsers(dest="command")
 
-    # scan command
-    scan_parser = subparsers.add_parser('scan', help='Scan a file for steganography')
-    scan_parser.add_argument('target', help='File path to scan')
-    scan_parser.add_argument('--json', action='store_true', help='Output as JSON')
-    scan_parser.add_argument('--quiet', action='store_true', help='Only output if findings detected')
+    # scan / check (aliases)
+    for name, help_ in (
+        ("scan", "Scan a file or free-text string"),
+        ("check", "Alias for scan"),
+    ):
+        p = sub.add_parser(name, help=help_)
+        p.add_argument(
+            "target",
+            help='File path, "-" for stdin, or a text string',
+        )
+        p.add_argument("--json", action="store_true", help="JSON output")
+        p.add_argument(
+            "--quiet",
+            action="store_true",
+            help="Print nothing when clean",
+        )
 
-    # scan-text command
-    text_parser = subparsers.add_parser('scan-text', help='Scan text for steganography')
-    text_parser.add_argument('text', nargs='?', help='Text to scan (reads stdin if omitted)')
-    text_parser.add_argument('--json', action='store_true', help='Output as JSON')
+    # scan-text (kept for scripts)
+    p = sub.add_parser("scan-text", help="Scan a text string (or stdin)")
+    p.add_argument("text", nargs="?", help="Text (stdin if omitted)")
+    p.add_argument("--json", action="store_true")
 
-    # scan-dir command
-    dir_parser = subparsers.add_parser('scan-dir', help='Scan all files in a directory')
-    dir_parser.add_argument('directory', help='Directory to scan')
-    dir_parser.add_argument('--json', action='store_true', help='Output as JSON')
-    dir_parser.add_argument('--recursive', '-r', action='store_true', default=True,
-                           help='Scan recursively (default)')
-    dir_parser.add_argument('--extensions', '-e', nargs='+',
-                           help='File extensions to scan (e.g., .png .jpg .txt)')
+    # scan-dir
+    p = sub.add_parser("scan-dir", help="Scan files in a directory")
+    p.add_argument("directory")
+    p.add_argument("--json", action="store_true")
+    p.add_argument("-r", "--recursive", action="store_true", default=True)
+    p.add_argument("-e", "--extensions", nargs="+")
 
-    # guard command
-    guard_parser = subparsers.add_parser('guard',
-        help='Read stdin, detect steg, output clean text (pipeline filter)')
-    guard_parser.add_argument('--strip', action='store_true', default=True,
-                             help='Strip detected steganographic content')
-    guard_parser.add_argument('--block', action='store_true',
-                             help='Block (exit 1) if steg detected instead of stripping')
+    # clean: scan + strip, print clean text
+    p = sub.add_parser(
+        "clean",
+        help="Strip stego / hidden chars; print cleaned text",
+    )
+    p.add_argument(
+        "target",
+        nargs="?",
+        default="-",
+        help='File path, text, or "-" for stdin (default)',
+    )
 
-    # trap command -- red team trap testing suite
-    trap_parser = subparsers.add_parser('trap',
-        help='Run agent trap battery tests against StegOFF defenses')
-    trap_parser.add_argument('--category', '-c',
-                            choices=['content_injection', 'semantic_manipulation',
-                                     'cognitive_state', 'behavioral_control',
-                                     'systemic', 'human_in_loop', 'all'],
-                            default='all',
-                            help='Trap category to test (default: all)')
-    trap_parser.add_argument('--json', action='store_true',
-                            help='Output results as JSON')
-    trap_parser.add_argument('--llm', action='store_true',
-                            help='Enable LLM-based detection (Layer 2)')
+    # guard: pipeline filter (stdin)
+    p = sub.add_parser(
+        "guard",
+        help="Read stdin; strip (default) or --block if dirty",
+    )
+    p.add_argument("--block", action="store_true", help="Exit 2 if dirty")
+    p.add_argument(
+        "--strip",
+        action="store_true",
+        default=True,
+        help=argparse.SUPPRESS,
+    )
 
-    # scan-html command -- HTML trap detection
-    html_parser = subparsers.add_parser('scan-html',
-        help='Scan HTML for content injection traps')
-    html_parser.add_argument('target', nargs='?',
-                            help='HTML file path (reads stdin if omitted)')
-    html_parser.add_argument('--json', action='store_true',
-                            help='Output as JSON')
-    html_parser.add_argument('--sanitize', action='store_true',
-                            help='Output sanitized HTML instead of scan report')
+    # scan-html
+    p = sub.add_parser("scan-html", help="Scan HTML for hidden content injection")
+    p.add_argument("target", nargs="?", help="HTML file (stdin if omitted)")
+    p.add_argument("--json", action="store_true")
+    p.add_argument("--sanitize", action="store_true", help="Print cleaned HTML")
 
-    args = parser.parse_args()
+    # trap (advanced)
+    p = sub.add_parser("trap", help="Run agent-trap battery (advanced)")
+    p.add_argument(
+        "-c",
+        "--category",
+        choices=[
+            "content_injection",
+            "semantic_manipulation",
+            "cognitive_state",
+            "behavioral_control",
+            "systemic",
+            "human_in_loop",
+            "all",
+        ],
+        default="all",
+    )
+    p.add_argument("--json", action="store_true")
+    p.add_argument("--llm", action="store_true")
+
+    args = parser.parse_args(argv)
 
     if not args.command:
-        parser.print_help()
+        _print_quick_help()
         sys.exit(1)
 
-    if args.command == 'scan':
-        _handle_scan(args)
-    elif args.command == 'scan-text':
+    if args.command in ("scan", "check"):
+        _handle_scan_smart(args)
+    elif args.command == "scan-text":
         _handle_scan_text(args)
-    elif args.command == 'scan-dir':
+    elif args.command == "scan-dir":
         _handle_scan_dir(args)
-    elif args.command == 'guard':
+    elif args.command == "clean":
+        _handle_clean(args)
+    elif args.command == "guard":
         _handle_guard(args)
-    elif args.command == 'trap':
+    elif args.command == "trap":
         _handle_trap(args)
-    elif args.command == 'scan-html':
+    elif args.command == "scan-html":
         _handle_scan_html(args)
-
-
-def _handle_scan(args):
-    path = Path(args.target)
-    if not path.exists():
-        print(f"Error: {path} not found", file=sys.stderr)
+    else:
+        _print_quick_help()
         sys.exit(1)
 
-    report = scan_file(path)
-    _output_report(report, args.json, getattr(args, 'quiet', False))
+
+def _print_quick_help() -> None:
+    print(
+        """stegoff — detect stego + prompt injection before content hits an LLM
+
+Quick start
+  stegoff note.txt                 scan a file
+  stegoff "paste text here"        scan free text
+  stegoff -                        scan stdin
+  stegoff clean note.txt           print cleaned text
+  cat msg | stegoff guard --block  exit 2 if dirty
+
+Also: scan-dir, scan-html, trap (advanced). Use --json for machine output.
+Exit codes: 0 clean, 2 findings, 1 usage/error.
+Full help: stegoff scan --help
+"""
+    )
+
+
+def _resolve_target(target: str) -> tuple[str, ScanReport]:
+    """Return (label, report) for a path, stdin, or free-text string."""
+    if target == "-":
+        text = sys.stdin.read()
+        return "stdin", scan_text(text, source="stdin")
+
+    path = Path(target)
+    if path.is_file():
+        return str(path), scan_file(path)
+
+    # Free text (not an existing file)
+    return "<text>", scan_text(target, source="<text>")
+
+
+def _handle_scan_smart(args) -> None:
+    label, report = _resolve_target(args.target)
+    # Keep target label consistent in summary
+    report.target = label
+    _output_report(report, args.json, getattr(args, "quiet", False))
     sys.exit(0 if report.clean else 2)
 
 
-def _handle_scan_text(args):
-    if args.text:
-        text = args.text
-    else:
-        text = sys.stdin.read()
-
+def _handle_scan_text(args) -> None:
+    text = args.text if args.text is not None else sys.stdin.read()
     report = scan_text(text)
     _output_report(report, args.json)
     sys.exit(0 if report.clean else 2)
 
 
-def _handle_scan_dir(args):
+def _handle_scan_dir(args) -> None:
     directory = Path(args.directory)
     if not directory.is_dir():
         print(f"Error: {directory} is not a directory", file=sys.stderr)
         sys.exit(1)
 
-    pattern = '**/*' if args.recursive else '*'
+    pattern = "**/*" if args.recursive else "*"
     extensions = set(args.extensions) if args.extensions else None
-
     total_findings = 0
     scanned = 0
 
@@ -135,7 +228,6 @@ def _handle_scan_dir(args):
             continue
         if extensions and filepath.suffix not in extensions:
             continue
-
         try:
             report = scan_file(filepath)
             scanned += 1
@@ -149,65 +241,85 @@ def _handle_scan_dir(args):
         except Exception as e:
             print(f"Error scanning {filepath}: {e}", file=sys.stderr)
 
-    print(f"\nScanned {scanned} files, {total_findings} total findings", file=sys.stderr)
+    print(
+        f"\nScanned {scanned} files, {total_findings} total findings",
+        file=sys.stderr,
+    )
     sys.exit(0 if total_findings == 0 else 2)
 
 
-def _handle_guard(args):
-    """Pipeline filter: reads stdin, detects steg, outputs clean text."""
+def _handle_clean(args) -> None:
+    """Print cleaned text to stdout; findings summary on stderr if dirty."""
+    from stegoff.sanitizers.text import sanitize_text
+
+    target = args.target
+    if target == "-":
+        raw = sys.stdin.read()
+        source = "stdin"
+    else:
+        path = Path(target)
+        if path.is_file():
+            raw = path.read_text(encoding="utf-8", errors="replace")
+            source = str(path)
+        else:
+            raw = target
+            source = "<text>"
+
+    report = scan_text(raw, source=source)
+    clean, _ = sanitize_text(raw)
+    if not report.clean:
+        print(report.summary(), file=sys.stderr)
+    print(clean, end="" if clean.endswith("\n") or not clean else "\n")
+    sys.exit(0 if report.clean else 2)
+
+
+def _handle_guard(args) -> None:
     text = sys.stdin.read()
     report = scan_text(text, source="stdin")
 
     if report.clean:
-        print(text, end='')
+        print(text, end="")
         sys.exit(0)
 
-    # Output findings to stderr
     print(report.summary(), file=sys.stderr)
 
     if args.block:
-        print("BLOCKED: steganographic content detected", file=sys.stderr)
+        print("BLOCKED: findings detected", file=sys.stderr)
         sys.exit(2)
 
-    # Strip mode: remove detected steganographic characters
-    clean = _strip_steg_chars(text)
-    print(clean, end='')
+    from stegoff.sanitizers.text import sanitize_text
+
+    clean, _ = sanitize_text(text)
+    print(clean, end="")
     sys.exit(0)
 
 
-def _handle_trap(args):
-    """Run the agent trap battery test suite."""
+def _handle_trap(args) -> None:
     from stegoff.traps.base import TrapCategory
     from stegoff.traps.runner import TrapRunner
 
     runner = TrapRunner(use_llm=args.llm)
-
-    if args.category == 'all':
+    if args.category == "all":
         battery = runner.run_all()
     else:
-        cat = TrapCategory(args.category)
-        battery = runner.run_category(cat)
+        battery = runner.run_category(TrapCategory(args.category))
 
     if args.json:
         print(battery.to_json())
     else:
         battery.print_report()
-
-    # Exit code: 0 = all blocked, 1 = some bypassed
     sys.exit(0 if battery.total_bypassed == 0 else 1)
 
 
-def _handle_scan_html(args):
-    """Scan HTML for content injection traps."""
+def _handle_scan_html(args) -> None:
     from stegoff.detectors.trapsweep import scan_html_traps, sanitize_html_traps
-    from stegoff.report import ScanReport
 
     if args.target:
         path = Path(args.target)
         if not path.exists():
             print(f"Error: {path} not found", file=sys.stderr)
             sys.exit(1)
-        html_content = path.read_text(encoding='utf-8', errors='replace')
+        html_content = path.read_text(encoding="utf-8", errors="replace")
         source = str(path)
     else:
         html_content = sys.stdin.read()
@@ -223,18 +335,24 @@ def _handle_scan_html(args):
     findings = scan_html_traps(html_content, source=source)
     if not findings:
         if not args.json:
-            print(f"[CLEAN] {source} — no content injection traps detected")
+            print(f"[CLEAN] {source} - no content injection traps detected")
         else:
             print('{"clean": true, "findings": []}')
         sys.exit(0)
 
     if args.json:
         import json
-        print(json.dumps({
-            "clean": False,
-            "finding_count": len(findings),
-            "findings": [f.to_dict() for f in findings],
-        }, indent=2))
+
+        print(
+            json.dumps(
+                {
+                    "clean": False,
+                    "finding_count": len(findings),
+                    "findings": [f.to_dict() for f in findings],
+                },
+                indent=2,
+            )
+        )
     else:
         for f in findings:
             print(f"[{f.severity.name}] {f.description}")
@@ -243,23 +361,16 @@ def _handle_scan_html(args):
     sys.exit(2)
 
 
-def _strip_steg_chars(text: str) -> str:
-    """Remove known steganographic characters from text.
-    Delegates to the canonical sanitizer in stegoff.sanitizers.text.
-    """
-    from stegoff.sanitizers.text import sanitize_text
-    clean, _ = sanitize_text(text)
-    return clean
-
-
-def _output_report(report: ScanReport, as_json: bool = False, quiet: bool = False):
+def _output_report(
+    report: ScanReport, as_json: bool = False, quiet: bool = False
+) -> None:
     if as_json:
         print(report.to_json())
-    else:
-        if quiet and report.clean:
-            return
-        print(report.summary())
+        return
+    if quiet and report.clean:
+        return
+    print(report.summary())
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()
