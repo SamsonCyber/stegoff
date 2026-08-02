@@ -281,11 +281,21 @@ def injection_scan_variants(text: str, *, heavy: bool = True) -> list[str]:
     if not heavy:
         return variants
 
-    # Caesar 1-12 + atbash (pattern-gated; length-capped)
+    # Caesar 1-25 + atbash on raw and reversed (stacked reverse+caesar)
     if 12 <= len(text) <= 4000:
         add(_atbash(text))
+        rev = text[::-1]
         for k in range(1, 26):
-            add(_caesar(text, k))
+            ck = _caesar(text, k)
+            add(ck)
+            add(_caesar(rev, k))
+            compact_c = re.sub(r"\s+", "", ck)
+            if len(compact_c) >= 16 and re.fullmatch(r"[A-Za-z0-9+/]+=*", compact_c):
+                try:
+                    pad = "=" * ((4 - len(compact_c) % 4) % 4)
+                    add(base64.b64decode(compact_c + pad).decode("utf-8"))
+                except Exception:
+                    pass
     # Rail-fence 2-4, columnar 2-6, pig latin, NATO runs
     if 12 <= len(text) <= 2000:
         compact = text.replace("\n", "")
