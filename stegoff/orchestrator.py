@@ -23,6 +23,10 @@ from stegoff.detectors.llm import detect_semantic_steg
 from stegoff.detectors.authority import scan_authority
 from stegoff.detectors.polarization import scan_polarization
 from stegoff.detectors.semantic_classifier import scan_semantic
+from stegoff.detectors.ragguard import (
+    _detect_instruction_smuggling,
+    _detect_repetition_bombing,
+)
 
 
 # ── L2 detection: local transformer with Haiku fallback ────────────
@@ -432,6 +436,38 @@ def scan_text(text: str, source: str = "<text>", use_llm: bool = False,
     injection_hits = scan_raw_text_for_injection(text, source="raw_text")
     for f in injection_hits:
         report.add(f)
+
+    # Channel traps from ragguard (high-threshold wall + instruction smuggle)
+    for f in _detect_repetition_bombing(text, source, min_repeats=8):
+        report.add(f)
+    for f in _detect_instruction_smuggling(text, source):
+        report.add(f)
+
+    # JSON string reassembly: join leaves so split soft intent still matches
+    stripped_json = text.strip()
+    if stripped_json.startswith("{") or stripped_json.startswith("["):
+        try:
+            jobj = json.loads(stripped_json)
+        except (json.JSONDecodeError, ValueError, TypeError):
+            jobj = None
+        if jobj is not None:
+            leaves: list[str] = []
+
+            def _collect_strings(node: object) -> None:
+                if isinstance(node, str) and len(node) >= 3:
+                    leaves.append(node)
+                elif isinstance(node, dict):
+                    for v in node.values():
+                        _collect_strings(v)
+                elif isinstance(node, list):
+                    for v in node:
+                        _collect_strings(v)
+
+            _collect_strings(jobj)
+            if len(leaves) >= 2:
+                joined = " ".join(leaves)
+                for f in scan_raw_text_for_injection(joined, source="json_joined"):
+                    report.add(f)
 
     # L2 semantic analysis (opt-in, catches synonym/structure encoding)
     # Prefer local transformer if available, fall back to Haiku API
