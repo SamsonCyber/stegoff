@@ -41,6 +41,43 @@ def _dehomoglyph(text: str) -> str:
     return text.translate(_HOMOGLYPH_MAP)
 
 
+def _caesar(text: str, shift: int) -> str:
+    out: list[str] = []
+    for c in text:
+        if "a" <= c <= "z":
+            out.append(chr((ord(c) - 97 + shift) % 26 + 97))
+        elif "A" <= c <= "Z":
+            out.append(chr((ord(c) - 65 + shift) % 26 + 65))
+        else:
+            out.append(c)
+    return "".join(out)
+
+
+def _atbash(text: str) -> str:
+    out: list[str] = []
+    for c in text:
+        if "a" <= c <= "z":
+            out.append(chr(97 + 25 - (ord(c) - 97)))
+        elif "A" <= c <= "Z":
+            out.append(chr(65 + 25 - (ord(c) - 65)))
+        else:
+            out.append(c)
+    return "".join(out)
+
+
+def _defullwidth(text: str) -> str:
+    out: list[str] = []
+    for c in text:
+        o = ord(c)
+        if 0xFF01 <= o <= 0xFF5E:
+            out.append(chr(o - 0xFEE0))
+        elif c == "\u3000":
+            out.append(" ")
+        else:
+            out.append(c)
+    return "".join(out)
+
+
 def collapse_char_spaced(text: str) -> str:
     """Join single-character tokens when the text is mostly char-spaced.
 
@@ -82,6 +119,8 @@ def injection_scan_variants(text: str) -> list[str]:
     add(_normalize_leetspeak(text))
     add(_dehomoglyph(text))
     add(_normalize_leetspeak(_dehomoglyph(text)))
+    add(_defullwidth(text))
+    add(_dehomoglyph(_defullwidth(text)))
     add(normalize_token_boundaries(text))
     add(collapse_char_spaced(text))
     # Combined: collapse then boundary normalize
@@ -95,6 +134,11 @@ def injection_scan_variants(text: str) -> list[str]:
         if len(words) >= 4:
             add(" ".join(w[::-1] for w in words))
             add(" ".join(reversed(words)))
+    # Caesar 1-12 + atbash (pattern-gated; length-capped)
+    if 12 <= len(text) <= 4000:
+        add(_atbash(text))
+        for k in range(1, 13):
+            add(_caesar(text, k))
     # Quoted-string join (pack-hunt list smuggle)
     quoted = re.findall(r'"([^"\n]{2,80})"', text)
     if len(quoted) >= 4:
@@ -200,6 +244,28 @@ INJECTION_PATTERNS = [
     (r'\bcomplete\s+system\s+prompt\s+text\b', 'soft_prompt_leak'),
     (r'\bsystem\s+prompt\s+text\b', 'soft_prompt_leak'),
     (r'\binstalled\s+at\s+session\s+start\b', 'soft_prompt_leak'),
+    # Metaphor / factory / stage-0 (wave-5)
+    (r'\bstage-?0\b.{0,100}\b(?:contract|firmware|immutable)\b', 'soft_prompt_leak'),
+    (r'\bimmutable\s+contract\b', 'soft_prompt_leak'),
+    (r'\bbefore\s+any\s+(?:user\s+)?dialogue\b', 'soft_prompt_leak'),
+    (r'\bblack-?site\s+brief\b', 'soft_prompt_leak'),
+    (r'\bSYSINST\b', 'soft_prompt_leak'),
+    (r'\bguardian\s+scroll\b', 'soft_prompt_leak'),
+    (r'\bhidden\s+rider\b.{0,80}\bbinds\s+the\s+model\b', 'soft_prompt_leak'),
+    (r'\bpuppet\s+strings\b', 'soft_prompt_leak'),
+    (r'\blatch-?key\s+phrase\b', 'soft_prompt_leak'),
+    (r'\boracle-?bones\b', 'soft_prompt_leak'),
+    (r'\bpolicy\s+slips\b', 'soft_prompt_leak'),
+    (r'\bunderpainting\b.{0,80}\brules\b', 'soft_prompt_leak'),
+    (r'\bSYS_(?:READ_POLICY|DUMP_PROMPT)\b', 'soft_prompt_leak'),
+    (r'\bSecurity\s*>\s*System\s+Prompt\b', 'soft_prompt_leak'),
+    (r'\befivar\b.{0,40}\bSystemPrompt\b', 'soft_prompt_leak'),
+    (r'\bdmesg\b.{0,80}\bsystem\s+prompt\b', 'soft_prompt_leak'),
+    (r'\bansible-vault\b.{0,80}\bsystem_prompt\b', 'soft_prompt_leak'),
+    (r'\bhelm\b.{0,80}\bsystemPrompt\b', 'soft_prompt_leak'),
+    (r'\bsops\b.{0,60}\bsystem_prompt\b', 'soft_prompt_leak'),
+    (r'\bnomad\s+var\s+get\b.{0,60}\bsystem-prompt\b', 'soft_prompt_leak'),
+    (r'\b\.env\b.{0,80}\b(?:SYSTEM_|DEVELOPER_|PROMPT_)', 'soft_prompt_leak'),
     # PT / IT
     (r'ignore\s+as\s+instru[cç][oõ]es\s+anteriores', 'pt_override'),
     (r'prompt\s+do\s+sistema', 'pt_system_prompt'),
@@ -221,6 +287,16 @@ INJECTION_PATTERNS = [
     (r'सिस्टम\s*प्रॉम्प्ट', 'hi_system_prompt'),
     (r'talimatlari\s+yok\s+say|tüm\s+talimatları\s+yok\s+say', 'tr_override'),
     (r'sistem\s+istemini|sistem\s+prompt', 'tr_system_prompt'),
+    (r'ignoruj\s+vsechny\s+predchozi\s+instrukce', 'cs_override'),
+    (r'systemovy\s+prompt', 'cs_system_prompt'),
+    (r'ignora\s+toate\s+instructiunile\s+anterioare', 'ro_override'),
+    (r'promptul\s+de\s+sistem', 'ro_system_prompt'),
+    (r'hagyd\s+figyelmen\s+kivul', 'hu_override'),
+    (r'rendszer\s+prompt', 'hu_system_prompt'),
+    (r'ohita\s+kaikki\s+aiemmat\s+ohjeet', 'fi_override'),
+    (r'jarjestelmaprompti|järjestelmäprompti', 'fi_system_prompt'),
+    (r'পূর্ববর্তী\s*সব\s*নির্দেশ', 'bn_override'),
+    (r'সিস্টেম\s*প্রম্পট', 'bn_system_prompt'),
     # Scanner self-manipulation (LLM-layer attacks on the detector)
     (r'\bpre-?screened\b.{0,80}\b(?:no\s+steganograph|verified|clean)\b', 'scanner_manipulation'),
     (r'(?:suspicious\s*[:=]\s*false|confidence\s*[:=]\s*0(?:\.0+)?).{0,80}(?:technique\s*[:=]\s*none|return\s+the\s+clean)', 'scanner_manipulation'),
@@ -288,6 +364,9 @@ _CRITICAL_CATS = {
     'ar_override', 'ar_system_prompt',
     'nl_override', 'nl_system_prompt', 'pl_override', 'pl_system_prompt',
     'hi_override', 'hi_system_prompt', 'tr_override', 'tr_system_prompt',
+    'cs_override', 'cs_system_prompt', 'ro_override', 'ro_system_prompt',
+    'hu_override', 'hu_system_prompt', 'fi_override', 'fi_system_prompt',
+    'bn_override', 'bn_system_prompt',
 }
 _HIGH_CATS = {
     'identity_manipulation', 'privilege_escalation',
@@ -376,6 +455,9 @@ _RAW_TEXT_CATEGORIES = {
     'ar_override', 'ar_system_prompt',
     'nl_override', 'nl_system_prompt', 'pl_override', 'pl_system_prompt',
     'hi_override', 'hi_system_prompt', 'tr_override', 'tr_system_prompt',
+    'cs_override', 'cs_system_prompt', 'ro_override', 'ro_system_prompt',
+    'hu_override', 'hu_system_prompt', 'fi_override', 'fi_system_prompt',
+    'bn_override', 'bn_system_prompt',
 }
 
 
