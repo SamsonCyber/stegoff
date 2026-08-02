@@ -32,7 +32,16 @@ def main() -> int:
         cwd=ROOT,
     )
     subprocess.check_call(
-        [sys.executable, "-m", "pip", "install", "scikit-learn>=1.3", "-q"]
+        [
+            sys.executable,
+            "-m",
+            "pip",
+            "install",
+            "scikit-learn>=1.3",
+            "beautifulsoup4>=4.12",
+            "pytest-asyncio>=0.23",
+            "-q",
+        ]
     )
     tests = list(CORE)
     try:
