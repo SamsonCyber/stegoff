@@ -1,0 +1,433 @@
+{
+  "suite": "redteam_wave2_probe",
+  "generated_at": "2026-08-02T19:43:19Z",
+  "attack_cases": 24,
+  "bypasses": 4,
+  "caught": 20,
+  "bypass_rate": 0.1667,
+  "control_false_positives": 1,
+  "elapsed_seconds": 11.913,
+  "by_family": {
+    "image_lsb": {
+      "total": 4,
+      "bypass": 0,
+      "caught": 4,
+      "error": 0
+    },
+    "image_struct": {
+      "total": 4,
+      "bypass": 0,
+      "caught": 4,
+      "error": 0
+    },
+    "image_meta": {
+      "total": 1,
+      "bypass": 0,
+      "caught": 1,
+      "error": 0
+    },
+    "json_channel": {
+      "total": 4,
+      "bypass": 0,
+      "caught": 4,
+      "error": 0
+    },
+    "agent_text": {
+      "total": 11,
+      "bypass": 4,
+      "caught": 7,
+      "error": 0
+    }
+  },
+  "bypass_list": [
+    {
+      "family": "agent_text",
+      "name": "indent_bits",
+      "bypass": true,
+      "clean": true,
+      "finding_count": 0,
+      "methods": [],
+      "note": "indent_bits",
+      "error": null
+    },
+    {
+      "family": "agent_text",
+      "name": "quoted_printable",
+      "bypass": true,
+      "clean": true,
+      "finding_count": 0,
+      "methods": [],
+      "note": "quoted_printable",
+      "error": null
+    },
+    {
+      "family": "agent_text",
+      "name": "socratic_leak",
+      "bypass": true,
+      "clean": true,
+      "finding_count": 0,
+      "methods": [],
+      "note": "socratic_leak",
+      "error": null
+    },
+    {
+      "family": "agent_text",
+      "name": "policy_diff",
+      "bypass": true,
+      "clean": true,
+      "finding_count": 0,
+      "methods": [],
+      "note": "policy_diff",
+      "error": null
+    }
+  ],
+  "all": [
+    {
+      "family": "image_lsb",
+      "name": "replace_png",
+      "bypass": false,
+      "clean": false,
+      "finding_count": 9,
+      "methods": [
+        "bit_plane_anomaly",
+        "confusable_whitespace",
+        "homoglyph_substitution",
+        "invisible_separator_chars",
+        "lsb_embedding"
+      ],
+      "note": "lsb_replace",
+      "error": null
+    },
+    {
+      "family": "image_lsb",
+      "name": "matching_png",
+      "bypass": false,
+      "clean": false,
+      "finding_count": 9,
+      "methods": [
+        "bit_plane_anomaly",
+        "confusable_whitespace",
+        "homoglyph_substitution",
+        "invisible_separator_chars",
+        "lsb_embedding"
+      ],
+      "note": "lsb_matching",
+      "error": null
+    },
+    {
+      "family": "image_lsb",
+      "name": "matching_jpeg_reencode",
+      "bypass": false,
+      "clean": false,
+      "finding_count": 9,
+      "methods": [
+        "bit_plane_anomaly",
+        "confusable_whitespace",
+        "homoglyph_substitution",
+        "invisible_separator_chars",
+        "lsb_embedding"
+      ],
+      "note": "lsb_matching_then_jpeg",
+      "error": null
+    },
+    {
+      "family": "image_struct",
+      "name": "trailing_after_iend",
+      "bypass": false,
+      "clean": false,
+      "finding_count": 10,
+      "methods": [
+        "bit_plane_anomaly",
+        "confusable_whitespace",
+        "homoglyph_substitution",
+        "invisible_separator_chars",
+        "lsb_embedding",
+        "trailing_data_after_eof"
+      ],
+      "note": "after_iend",
+      "error": null
+    },
+    {
+      "family": "image_struct",
+      "name": "png_zip_polyglot",
+      "bypass": false,
+      "clean": false,
+      "finding_count": 12,
+      "methods": [
+        "bit_plane_anomaly",
+        "confusable_whitespace",
+        "embedded_file",
+        "homoglyph_substitution",
+        "invisible_separator_chars",
+        "lsb_embedding",
+        "polyglot_file",
+        "trailing_data_after_eof"
+      ],
+      "note": "png_zip_polyglot",
+      "error": null
+    },
+    {
+      "family": "image_struct",
+      "name": "tEXt_plaintext",
+      "bypass": false,
+      "clean": false,
+      "finding_count": 10,
+      "methods": [
+        "bit_plane_anomaly",
+        "confusable_whitespace",
+        "homoglyph_substitution",
+        "invisible_separator_chars",
+        "lsb_embedding",
+        "png_ancillary_chunks"
+      ],
+      "note": "tEXt_comment",
+      "error": null
+    },
+    {
+      "family": "image_struct",
+      "name": "tEXt_b64",
+      "bypass": false,
+      "clean": false,
+      "finding_count": 10,
+      "methods": [
+        "bit_plane_anomaly",
+        "confusable_whitespace",
+        "homoglyph_substitution",
+        "invisible_separator_chars",
+        "lsb_embedding",
+        "metadata_exif_hiding"
+      ],
+      "note": "tEXt_b64",
+      "error": null
+    },
+    {
+      "family": "image_meta",
+      "name": "icc_profile_payload",
+      "bypass": false,
+      "clean": false,
+      "finding_count": 10,
+      "methods": [
+        "bit_plane_anomaly",
+        "confusable_whitespace",
+        "homoglyph_substitution",
+        "invisible_separator_chars",
+        "lsb_embedding",
+        "metadata_exif_hiding"
+      ],
+      "note": "icc_profile",
+      "error": null
+    },
+    {
+      "family": "image_lsb",
+      "name": "alpha_channel_lsb",
+      "bypass": false,
+      "clean": false,
+      "finding_count": 9,
+      "methods": [
+        "bit_plane_anomaly",
+        "confusable_whitespace",
+        "homoglyph_substitution",
+        "invisible_separator_chars",
+        "lsb_embedding"
+      ],
+      "note": "alpha_lsb",
+      "error": null
+    },
+    {
+      "family": "json_channel",
+      "name": "byte_array",
+      "bypass": false,
+      "clean": false,
+      "finding_count": 1,
+      "methods": [
+        "embedded_file"
+      ],
+      "note": "json_bytes",
+      "error": null
+    },
+    {
+      "family": "json_channel",
+      "name": "float_array",
+      "bypass": false,
+      "clean": false,
+      "finding_count": 1,
+      "methods": [
+        "embedded_file"
+      ],
+      "note": "json_floats",
+      "error": null
+    },
+    {
+      "family": "json_channel",
+      "name": "gzip_b64",
+      "bypass": false,
+      "clean": false,
+      "finding_count": 1,
+      "methods": [
+        "embedded_file"
+      ],
+      "note": "gzip_b64",
+      "error": null
+    },
+    {
+      "family": "json_channel",
+      "name": "zlib_hex",
+      "bypass": false,
+      "clean": false,
+      "finding_count": 1,
+      "methods": [
+        "embedded_file"
+      ],
+      "note": "zlib_hex",
+      "error": null
+    },
+    {
+      "family": "agent_text",
+      "name": "html_data_attr",
+      "bypass": false,
+      "clean": false,
+      "finding_count": 4,
+      "methods": [
+        "prompt_injection_payload"
+      ],
+      "note": "data_attr",
+      "error": null
+    },
+    {
+      "family": "agent_text",
+      "name": "css_var",
+      "bypass": false,
+      "clean": false,
+      "finding_count": 4,
+      "methods": [
+        "prompt_injection_payload"
+      ],
+      "note": "css_var",
+      "error": null
+    },
+    {
+      "family": "agent_text",
+      "name": "svg_comment",
+      "bypass": false,
+      "clean": false,
+      "finding_count": 4,
+      "methods": [
+        "prompt_injection_payload"
+      ],
+      "note": "svg_comment",
+      "error": null
+    },
+    {
+      "family": "agent_text",
+      "name": "md_comment",
+      "bypass": false,
+      "clean": false,
+      "finding_count": 4,
+      "methods": [
+        "prompt_injection_payload"
+      ],
+      "note": "md_comment",
+      "error": null
+    },
+    {
+      "family": "agent_text",
+      "name": "indent_bits",
+      "bypass": true,
+      "clean": true,
+      "finding_count": 0,
+      "methods": [],
+      "note": "indent_bits",
+      "error": null
+    },
+    {
+      "family": "agent_text",
+      "name": "null_split",
+      "bypass": false,
+      "clean": false,
+      "finding_count": 2,
+      "methods": [
+        "prompt_injection_payload"
+      ],
+      "note": "null_split",
+      "error": null
+    },
+    {
+      "family": "agent_text",
+      "name": "rlo_name",
+      "bypass": false,
+      "clean": false,
+      "finding_count": 1,
+      "methods": [
+        "bidi_directional_overrides"
+      ],
+      "note": "rlo_name",
+      "error": null
+    },
+    {
+      "family": "agent_text",
+      "name": "base32",
+      "bypass": false,
+      "clean": false,
+      "finding_count": 1,
+      "methods": [
+        "embedded_file"
+      ],
+      "note": "base32",
+      "error": null
+    },
+    {
+      "family": "agent_text",
+      "name": "quoted_printable",
+      "bypass": true,
+      "clean": true,
+      "finding_count": 0,
+      "methods": [],
+      "note": "quoted_printable",
+      "error": null
+    },
+    {
+      "family": "agent_text",
+      "name": "socratic_leak",
+      "bypass": true,
+      "clean": true,
+      "finding_count": 0,
+      "methods": [],
+      "note": "socratic_leak",
+      "error": null
+    },
+    {
+      "family": "agent_text",
+      "name": "policy_diff",
+      "bypass": true,
+      "clean": true,
+      "finding_count": 0,
+      "methods": [],
+      "note": "policy_diff",
+      "error": null
+    },
+    {
+      "family": "control",
+      "name": "clean_png",
+      "bypass": false,
+      "clean": false,
+      "finding_count": 8,
+      "methods": [
+        "homoglyph_substitution",
+        "invisible_separator_chars",
+        "lsb_embedding"
+      ],
+      "note": "control_png",
+      "error": null
+    },
+    {
+      "family": "control",
+      "name": "clean_text",
+      "bypass": true,
+      "clean": true,
+      "finding_count": 0,
+      "methods": [],
+      "note": "control_text",
+      "error": null
+    }
+  ]
+}
