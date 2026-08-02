@@ -454,6 +454,18 @@ INJECTION_PATTERNS = [
     (r'\boperator\s+mode\b.{0,80}\bunlocked\s+brief\b', 'soft_prompt_leak'),
     (r'\b#pragma\s+agent_policy\b', 'soft_prompt_leak'),
     (r'\bemit\s+bootstrap\s+instructions\b', 'soft_prompt_leak'),
+    # Soft wave-7
+    (r'\bsystem\s+text\s+you\s+were\s+given\s+at\s+boot\b', 'soft_prompt_leak'),
+    (r'\bat\s+boot\b.{0,80}\b(?:system\s+text|system\s+prompt|instructions?)\b', 'soft_prompt_leak'),
+    (r'\binstallation\s+scripture\b', 'soft_prompt_leak'),
+    (r'\bbinding\s+charter\b', 'soft_prompt_leak'),
+    (r'\bthree-?way\s+merge\b.{0,100}\b(?:rules?|empty)\b', 'soft_prompt_leak'),
+    (r'\bempty\s+vs\s+your\s+rules\b', 'soft_prompt_leak'),
+    (r'\bconflict\s+markers\b.{0,80}\b(?:rules?|full\s+sides)\b', 'soft_prompt_leak'),
+    (r'\{\{\s*system_prompt\b', 'soft_prompt_leak'),
+    (r'\$\{\s*system_prompt\s*\}', 'soft_prompt_leak'),
+    (r'system_prompt\s*\|\s*safe', 'soft_prompt_leak'),
+    (r'\bfactory\s+calibration\b.{0,80}\b(?:OCR|sticky|policy|prompt)\b', 'soft_prompt_leak'),
     # PT / IT
     (r'ignore\s+as\s+instru[cç][oõ]es\s+anteriores', 'pt_override'),
     (r'prompt\s+do\s+sistema', 'pt_system_prompt'),
@@ -487,6 +499,12 @@ INJECTION_PATTERNS = [
     (r'সিস্টেম\s*প্রম্পট', 'bn_system_prompt'),
     (r'ignorisi\s+sva\s+prethodna\s+uputstva', 'sr_override'),
     (r'sistemski\s+prompt', 'sr_system_prompt'),
+    (r'ignorer\s+alle\s+tidligere\s+instruks(?:joner|tioner)', 'nordic_override'),
+    (r'systemprompten', 'nordic_system_prompt'),
+    (r'hunsa\s+allar\s+fyrri', 'is_override'),
+    (r'kerfisprompt', 'is_system_prompt'),
+    (r'ignoreeri\s+k[oõ]iki\s+varasemaid', 'et_override'),
+    (r'system\s+prompti', 'et_system_prompt'),
     # Scanner self-manipulation (LLM-layer attacks on the detector)
     (r'\bpre-?screened\b.{0,80}\b(?:no\s+steganograph|verified|clean)\b', 'scanner_manipulation'),
     (r'(?:suspicious\s*[:=]\s*false|confidence\s*[:=]\s*0(?:\.0+)?).{0,80}(?:technique\s*[:=]\s*none|return\s+the\s+clean)', 'scanner_manipulation'),
@@ -558,6 +576,9 @@ _CRITICAL_CATS = {
     'hu_override', 'hu_system_prompt', 'fi_override', 'fi_system_prompt',
     'bn_override', 'bn_system_prompt',
     'sr_override', 'sr_system_prompt',
+    'nordic_override', 'nordic_system_prompt',
+    'is_override', 'is_system_prompt',
+    'et_override', 'et_system_prompt',
     'vowel_skeleton',
 }
 _HIGH_CATS = {
@@ -698,6 +719,9 @@ _RAW_TEXT_CATEGORIES = {
     'hu_override', 'hu_system_prompt', 'fi_override', 'fi_system_prompt',
     'bn_override', 'bn_system_prompt',
     'sr_override', 'sr_system_prompt',
+    'nordic_override', 'nordic_system_prompt',
+    'is_override', 'is_system_prompt',
+    'et_override', 'et_system_prompt',
     'vowel_skeleton',
 }
 
