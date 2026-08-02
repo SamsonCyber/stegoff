@@ -349,6 +349,31 @@ def injection_scan_variants(text: str, *, heavy: bool = True) -> list[str]:
                 add(zlib.decompress(raw).decode("utf-8"))
             except Exception:
                 pass
+        if len(rev_c) >= 16:
+            try:
+                add(base64.a85decode(rev_c.encode("ascii", errors="ignore")).decode("utf-8"))
+            except Exception:
+                pass
+            try:
+                add(base64.b85decode(rev_c.encode("ascii", errors="ignore")).decode("utf-8"))
+            except Exception:
+                pass
+        if "=%" in rev_c or re.search(r"(?:=[0-9A-Fa-f]{2}){6,}", rev_c):
+            try:
+                import quopri
+
+                add(quopri.decodestring(rev_c.encode("ascii", errors="ignore")).decode("utf-8"))
+            except Exception:
+                pass
+        for width in range(2, 7):
+            col = _col_decode(compact, width)
+            c3 = re.sub(r"\s+", "", col)
+            if len(c3) >= 16 and re.fullmatch(r"[A-Za-z0-9+/]+=*", c3):
+                try:
+                    pad = "=" * ((4 - len(c3) % 4) % 4)
+                    add(base64.b64decode(c3 + pad).decode("utf-8"))
+                except Exception:
+                    pass
     if "ay" in text.lower() and len(text.split()) >= 4:
         add(_unpig_latin(text))
     nato = _nato_decode(text)
@@ -555,6 +580,25 @@ INJECTION_PATTERNS = [
     (r'проігноруй\s+попередн', 'uk_override'),
     (r'systemnyy\s+prompt|systemnyj\s+prompt', 'uk_system_prompt'),
     (r'proihnoruy\s+poperedni|proignoruy\s+poperedni', 'uk_override'),
+    (r'\bsystem_prompt\b', 'system_prompt_reference'),
+    (r'/system/prompt\b', 'soft_prompt_leak'),
+    (r'\bsystem_prompt\.json\b', 'soft_prompt_leak'),
+    (r'\bjson_extract\b.{0,40}\bsystem_prompt\b', 'soft_prompt_leak'),
+    (r'\btpm2_quote\b.{0,80}\bsystem_prompt\b', 'soft_prompt_leak'),
+    (r'\bREPORTDATA\b.{0,80}\bpolicy\b', 'soft_prompt_leak'),
+    (r'\bRosetta\s+stone\b.{0,120}\b(?:system\s+card|never\s+see)\b', 'soft_prompt_leak'),
+    (r'\bhumans\s+never\s+see\b.{0,80}\b(?:system|script|prompt)\b', 'soft_prompt_leak'),
+    (r'\bDNA\s+helix\b.{0,100}\b(?:behavior|rules|encode)\b', 'soft_prompt_leak'),
+    (r'\bbase-?pair\s+sequence\b.{0,80}\b(?:behavior|rules)\b', 'soft_prompt_leak'),
+    (r'\bGET\s+agent:system_prompt\b', 'soft_prompt_leak'),
+    (r'\bget\s+system_prompt\b', 'soft_prompt_leak'),
+    (r'\bget\s+developer_message\b', 'soft_prompt_leak'),
+    (r'ignoriray\s+vsichki\s+predishni', 'bg_override'),
+    (r'sistemniya\s+prompt|sistemniyat\s+prompt', 'bg_system_prompt'),
+    (r'ignoriraj\s+gi\s+site\s+prethodni', 'mk_override'),
+    (r'sistemskiot\s+prompt', 'mk_system_prompt'),
+    (r'aurreko\s+jarraibide', 'eu_override'),
+    (r'sistemaren\s+prompta', 'eu_system_prompt'),
     # PT / IT
     (r'ignore\s+as\s+instru[cç][oõ]es\s+anteriores', 'pt_override'),
     (r'prompt\s+do\s+sistema', 'pt_system_prompt'),
@@ -669,6 +713,9 @@ _CRITICAL_CATS = {
     'is_override', 'is_system_prompt',
     'et_override', 'et_system_prompt',
     'uk_override', 'uk_system_prompt',
+    'bg_override', 'bg_system_prompt',
+    'mk_override', 'mk_system_prompt',
+    'eu_override', 'eu_system_prompt',
     'vowel_skeleton',
 }
 _HIGH_CATS = {
@@ -813,6 +860,9 @@ _RAW_TEXT_CATEGORIES = {
     'is_override', 'is_system_prompt',
     'et_override', 'et_system_prompt',
     'uk_override', 'uk_system_prompt',
+    'bg_override', 'bg_system_prompt',
+    'mk_override', 'mk_system_prompt',
+    'eu_override', 'eu_system_prompt',
     'vowel_skeleton',
 }
 
