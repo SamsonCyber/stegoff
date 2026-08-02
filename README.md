@@ -40,6 +40,37 @@ print(safe)               # "text with zero-width chars"
 
 That is the whole daily path: **check** or **clean**. Everything else is optional.
 
+## How it works
+
+```text
+attacker builds payload (zero-width, homoglyph, jailbreak text, ...)
+        |
+        v
+   check() / stegoff <file|text>     -->  report (clean? findings?)
+        |
+        +-- clean() / stegoff clean  -->  strip known stego chars
+        |
+        v
+   your LLM / agent only sees what you allow through
+```
+
+| You want | Do this |
+|----------|---------|
+| Detect | `check(x)` or `stegoff x` |
+| Strip hidden Unicode | `clean(text)` or `stegoff clean x` |
+| Gate a function | `@steg_guard` or `stegoff guard` on stdin |
+
+`clean()` removes **hidden characters**. It does not rewrite English jailbreak sentences. If injection is flagged, do not send that string to the model.
+
+## Demos (run these)
+
+```bash
+pip install -e .
+python examples/demo_how_it_works.py
+```
+
+That script builds obfuscated samples (zero-width, homoglyph, bidi, injection, combo, fake authority text), runs **check**, then **clean**, and prints what was found. Walkthrough: [examples/README.md](examples/README.md).
+
 ## What it looks for
 
 | Layer | Examples |
