@@ -1,12 +1,12 @@
 {
   "suite": "redteam_wave2_probe",
-  "generated_at": "2026-08-02T20:06:01Z",
+  "generated_at": "2026-08-02T20:01:44Z",
   "attack_cases": 24,
   "bypasses": 0,
   "caught": 24,
   "bypass_rate": 0.0,
-  "control_false_positives": 0,
-  "elapsed_seconds": 13.875,
+  "control_false_positives": 1,
+  "elapsed_seconds": 10.488,
   "by_family": {
     "image_lsb": {
       "total": 4,
@@ -46,9 +46,12 @@
       "name": "replace_png",
       "bypass": false,
       "clean": false,
-      "finding_count": 6,
+      "finding_count": 10,
       "methods": [
         "bit_plane_anomaly",
+        "confusable_whitespace",
+        "homoglyph_substitution",
+        "invisible_separator_chars",
         "lsb_embedding"
       ],
       "note": "lsb_replace",
@@ -59,9 +62,12 @@
       "name": "matching_png",
       "bypass": false,
       "clean": false,
-      "finding_count": 6,
+      "finding_count": 10,
       "methods": [
         "bit_plane_anomaly",
+        "confusable_whitespace",
+        "homoglyph_substitution",
+        "invisible_separator_chars",
         "lsb_embedding"
       ],
       "note": "lsb_matching",
@@ -72,9 +78,12 @@
       "name": "matching_jpeg_reencode",
       "bypass": false,
       "clean": false,
-      "finding_count": 6,
+      "finding_count": 11,
       "methods": [
         "bit_plane_anomaly",
+        "confusable_whitespace",
+        "homoglyph_substitution",
+        "invisible_separator_chars",
         "lsb_embedding"
       ],
       "note": "lsb_matching_then_jpeg",
@@ -85,9 +94,12 @@
       "name": "trailing_after_iend",
       "bypass": false,
       "clean": false,
-      "finding_count": 7,
+      "finding_count": 11,
       "methods": [
         "bit_plane_anomaly",
+        "confusable_whitespace",
+        "homoglyph_substitution",
+        "invisible_separator_chars",
         "lsb_embedding",
         "trailing_data_after_eof"
       ],
@@ -99,10 +111,13 @@
       "name": "png_zip_polyglot",
       "bypass": false,
       "clean": false,
-      "finding_count": 9,
+      "finding_count": 13,
       "methods": [
         "bit_plane_anomaly",
+        "confusable_whitespace",
         "embedded_file",
+        "homoglyph_substitution",
+        "invisible_separator_chars",
         "lsb_embedding",
         "polyglot_file",
         "trailing_data_after_eof"
@@ -115,9 +130,12 @@
       "name": "tEXt_plaintext",
       "bypass": false,
       "clean": false,
-      "finding_count": 7,
+      "finding_count": 11,
       "methods": [
         "bit_plane_anomaly",
+        "confusable_whitespace",
+        "homoglyph_substitution",
+        "invisible_separator_chars",
         "lsb_embedding",
         "png_ancillary_chunks"
       ],
@@ -129,9 +147,12 @@
       "name": "tEXt_b64",
       "bypass": false,
       "clean": false,
-      "finding_count": 7,
+      "finding_count": 11,
       "methods": [
         "bit_plane_anomaly",
+        "confusable_whitespace",
+        "homoglyph_substitution",
+        "invisible_separator_chars",
         "lsb_embedding",
         "metadata_exif_hiding"
       ],
@@ -143,9 +164,12 @@
       "name": "icc_profile_payload",
       "bypass": false,
       "clean": false,
-      "finding_count": 7,
+      "finding_count": 11,
       "methods": [
         "bit_plane_anomaly",
+        "confusable_whitespace",
+        "homoglyph_substitution",
+        "invisible_separator_chars",
         "lsb_embedding",
         "metadata_exif_hiding"
       ],
@@ -157,9 +181,12 @@
       "name": "alpha_channel_lsb",
       "bypass": false,
       "clean": false,
-      "finding_count": 6,
+      "finding_count": 10,
       "methods": [
         "bit_plane_anomaly",
+        "confusable_whitespace",
+        "homoglyph_substitution",
+        "invisible_separator_chars",
         "lsb_embedding"
       ],
       "note": "alpha_lsb",
@@ -352,10 +379,14 @@
     {
       "family": "control",
       "name": "clean_png",
-      "bypass": true,
-      "clean": true,
-      "finding_count": 0,
-      "methods": [],
+      "bypass": false,
+      "clean": false,
+      "finding_count": 8,
+      "methods": [
+        "homoglyph_substitution",
+        "invisible_separator_chars",
+        "lsb_embedding"
+      ],
       "note": "control_png",
       "error": null
     },

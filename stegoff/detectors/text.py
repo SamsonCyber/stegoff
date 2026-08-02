@@ -862,23 +862,30 @@ def detect_trailing_whitespace_encoding(text: str) -> list[Finding]:
     lines = text.split('\n')
     encoded_lines = 0
     total_trailing_bits = 0
+    sparse_lines = 0  # lines with 1-2 trailing space/tab bits
 
     for line in lines:
         stripped = line.rstrip(' \t\r')
         trailing = line[len(stripped):].replace('\r', '')
+        if not trailing or not set(trailing) <= {' ', '\t'}:
+            continue
         if len(trailing) >= 3:
-            if set(trailing) <= {' ', '\t'}:
-                encoded_lines += 1
-                total_trailing_bits += len(trailing)
+            encoded_lines += 1
+            total_trailing_bits += len(trailing)
+        elif len(trailing) >= 1:
+            sparse_lines += 1
+            total_trailing_bits += len(trailing)
 
-    if encoded_lines < 3:
+    # Dense classic snow: many lines with >=3 trailing chars
+    dense_hit = encoded_lines >= 3 and (encoded_lines / max(len(lines), 1)) >= 0.3
+    # Sparse channel: enough total bits even if only 1-2 trailers per line
+    sparse_hit = sparse_lines >= 8 and total_trailing_bits >= 16
+
+    if not dense_hit and not sparse_hit:
         return []
 
-    ratio = encoded_lines / max(len(lines), 1)
-    if ratio < 0.3:
-        return []
-
-    severity = Severity.HIGH if encoded_lines > 10 else Severity.MEDIUM
+    ratio = (encoded_lines + sparse_lines) / max(len(lines), 1)
+    severity = Severity.HIGH if total_trailing_bits > 40 or encoded_lines > 10 else Severity.MEDIUM
     confidence = min(0.90, 0.50 + ratio * 0.5)
 
     bits = []
@@ -886,18 +893,125 @@ def detect_trailing_whitespace_encoding(text: str) -> list[Finding]:
         stripped = line.rstrip(' \t\r')
         trailing = line[len(stripped):].replace('\r', '')
         for ch in trailing:
-            bits.append('0' if ch == ' ' else '1')
+            if ch in (' ', '\t'):
+                bits.append('0' if ch == ' ' else '1')
 
     decoded = _bits_to_text(bits) if len(bits) >= 8 else ""
+    mode = "dense" if dense_hit else "sparse"
 
     return [Finding(
         method=StegMethod.CONFUSABLE_WHITESPACE,
         severity=severity,
         confidence=confidence,
-        description=f"Trailing whitespace encoding: {encoded_lines}/{len(lines)} lines carry space/tab bits",
-        evidence=f"{total_trailing_bits} trailing chars across {encoded_lines} lines",
+        description=(
+            f"Trailing whitespace encoding ({mode}): "
+            f"{encoded_lines + sparse_lines}/{len(lines)} lines carry space/tab bits"
+        ),
+        evidence=f"{total_trailing_bits} trailing chars across {encoded_lines + sparse_lines} lines",
         decoded_payload=decoded if _is_readable(decoded) else f"[{len(bits)} bits]",
-        metadata={"encoded_lines": encoded_lines, "total_lines": len(lines), "bit_count": len(bits)},
+        metadata={
+            "encoded_lines": encoded_lines,
+            "sparse_lines": sparse_lines,
+            "total_lines": len(lines),
+            "bit_count": len(bits),
+            "mode": mode,
+        },
+    )]
+
+
+def detect_nbsp_space_binary(text: str) -> list[Finding]:
+    """Detect space vs NBSP binary channels between words."""
+    # Split keeping delimiters
+    parts = re.split(r'([ \u00a0]+)', text)
+    if len(parts) < 9:
+        return []
+    bits: list[str] = []
+    nbsp_runs = 0
+    space_runs = 0
+    for p in parts:
+        if not p or p.strip('\u00a0 '):
+            continue  # word tokens
+        if p == '\u00a0' or set(p) == {'\u00a0'}:
+            bits.append('1')
+            nbsp_runs += 1
+        elif p == ' ' or set(p) == {' '}:
+            bits.append('0')
+            space_runs += 1
+        elif ' ' in p and '\u00a0' in p:
+            # mixed run: suspicious
+            bits.append('1')
+            nbsp_runs += 1
+
+    if nbsp_runs < 3 or space_runs < 3 or len(bits) < 8:
+        return []
+
+    decoded = _bits_to_text(bits) if len(bits) >= 8 else ""
+    severity = Severity.HIGH if len(bits) >= 16 else Severity.MEDIUM
+    return [Finding(
+        method=StegMethod.CONFUSABLE_WHITESPACE,
+        severity=severity,
+        confidence=0.80 if len(bits) >= 16 else 0.65,
+        description=(
+            f"Space/NBSP binary channel: {nbsp_runs} NBSP runs and "
+            f"{space_runs} space runs between words"
+        ),
+        evidence=f"{len(bits)} inter-word bits extracted",
+        decoded_payload=decoded if _is_readable(decoded) else f"[{len(bits)} bits]",
+        metadata={"bit_count": len(bits), "nbsp_runs": nbsp_runs, "space_runs": space_runs},
+    )]
+
+
+def detect_indentation_encoding(text: str) -> list[Finding]:
+    """Detect 2-space vs 4-space (or tab) indentation used as a bit channel."""
+    lines = text.split('\n')
+    bits: list[int] = []
+    two = 0
+    four = 0
+    for line in lines:
+        if not line or not line.strip():
+            continue
+        # leading whitespace only spaces/tabs
+        m = re.match(r'^([ \t]+)', line)
+        if not m:
+            continue
+        ws = m.group(1)
+        if '\t' in ws:
+            continue  # skip mixed tabs for this simple channel
+        n = len(ws)
+        if n == 2:
+            bits.append(0)
+            two += 1
+        elif n == 4:
+            bits.append(1)
+            four += 1
+        elif n in (6, 8):
+            # nested: take low bit of (n//2)
+            bits.append(1 if (n // 2) % 2 else 0)
+
+    # Need both depths and enough bits to look like a channel
+    if two < 4 or four < 4 or len(bits) < 16:
+        return []
+
+    # Entropy-ish: both symbols used fairly often
+    ones = sum(bits)
+    zeros = len(bits) - ones
+    if ones < 4 or zeros < 4:
+        return []
+
+    bit_str = ''.join(str(b) for b in bits)
+    decoded = _bits_to_text(list(bit_str)) if len(bits) >= 8 else ""
+    severity = Severity.HIGH if len(bits) >= 24 else Severity.MEDIUM
+    return [Finding(
+        method=StegMethod.CONFUSABLE_WHITESPACE,
+        severity=severity,
+        confidence=min(0.88, 0.55 + len(bits) * 0.01),
+        description=(
+            f"Indentation bit-channel: {two} two-space and {four} four-space "
+            f"indents ({len(bits)} bits)"
+        ),
+        evidence=f"bit stream length={len(bits)}",
+        decoded_payload=decoded if _is_readable(decoded) else f"[{len(bits)} bits]",
+        metadata={"two_space": two, "four_space": four, "bit_count": len(bits)},
     )]
 
 
@@ -1223,6 +1337,7 @@ ALL_TEXT_DETECTORS: list[Callable[[str], list[Finding]]] = [
     detect_variation_selectors,
     detect_combining_marks,
     detect_confusable_whitespace,
+    detect_nbsp_space_binary,
     detect_bidi_overrides,
     detect_hangul_filler,
     detect_math_alphanumeric,
@@ -1231,6 +1346,7 @@ ALL_TEXT_DETECTORS: list[Callable[[str], list[Finding]]] = [
     detect_emoji_skin_tone,
     detect_invisible_separators,
     detect_trailing_whitespace_encoding,
+    detect_indentation_encoding,
     detect_interlinear_and_mongolian_vs,
     detect_anomalous_unicode,
     detect_acrostic_encoding,
