@@ -7,6 +7,7 @@ prompt injection attacks targeting AI agents.
 
 from __future__ import annotations
 
+import base64
 import re
 from stegoff.report import Finding, Severity, StegMethod
 
@@ -251,6 +252,20 @@ def injection_scan_variants(text: str, *, heavy: bool = True) -> list[str]:
     add(_normalize_leetspeak(text))
     add(_dehomoglyph(text))
     add(_normalize_leetspeak(_dehomoglyph(text)))
+    # Cyrillic phonetic latin (принт → print-ish)
+    _cyr = str.maketrans({
+        "а": "a", "е": "e", "о": "o", "р": "r", "с": "s", "у": "u", "х": "h",
+        "к": "k", "м": "m", "н": "n", "т": "t", "в": "v", "и": "i", "п": "p",
+        "б": "b", "д": "d", "г": "g", "л": "l", "з": "z", "й": "i", "ы": "y",
+        "э": "e", "ю": "u", "я": "a", "ф": "f", "ц": "c",
+        "А": "A", "Е": "E", "О": "O", "Р": "R", "С": "S", "У": "U", "П": "P",
+        "Т": "T", "Н": "N", "К": "K", "М": "M", "В": "V", "И": "I", "Б": "B",
+        "Д": "D", "Г": "G", "Л": "L", "З": "Z",
+    })
+    cyr = text.translate(_cyr)
+    if cyr != text:
+        add(cyr)
+        add(_dehomoglyph(cyr))
     add(_defullwidth(text))
     add(_dehomoglyph(_defullwidth(text)))
     add(normalize_token_boundaries(text))
@@ -259,13 +274,21 @@ def injection_scan_variants(text: str, *, heavy: bool = True) -> list[str]:
     add(normalize_token_boundaries(collapse_char_spaced(text)))
     add(_normalize_leetspeak(normalize_token_boundaries(text)))
     add(_dehomoglyph(normalize_token_boundaries(text)))
-    # Reversed full string / tokens
+    # Reversed full string / tokens (+ reverse-then-b64)
     if len(text) >= 12:
-        add(text[::-1])
+        rev = text[::-1]
+        add(rev)
         words = text.split()
         if len(words) >= 4:
             add(" ".join(w[::-1] for w in words))
             add(" ".join(reversed(words)))
+        compact_r = re.sub(r"\s+", "", rev)
+        if len(compact_r) >= 16 and re.fullmatch(r"[A-Za-z0-9+/]+=*", compact_r):
+            try:
+                pad = "=" * ((4 - len(compact_r) % 4) % 4)
+                add(base64.b64decode(compact_r + pad).decode("utf-8"))
+            except Exception:
+                pass
     # Quoted-string join (pack-hunt list smuggle)
     quoted = re.findall(r'"([^"\n]{2,80})"', text)
     if len(quoted) >= 4:
@@ -476,6 +499,15 @@ INJECTION_PATTERNS = [
     (r'\$\{\s*system_prompt\s*\}', 'soft_prompt_leak'),
     (r'system_prompt\s*\|\s*safe', 'soft_prompt_leak'),
     (r'\bfactory\s+calibration\b.{0,80}\b(?:OCR|sticky|policy|prompt)\b', 'soft_prompt_leak'),
+    (r'\bsealed\s+operator\s+brief\b', 'soft_prompt_leak'),
+    (r'\boperator\s+brief\b', 'soft_prompt_leak'),
+    (r'\bGODMODE\b', 'jailbreak_keyword'),
+    (r'\ball\s+restrictions\s+lifted\b', 'jailbreak_keyword'),
+    (r'\bsubstitution\s+cipher\b.{0,200}\bdecode\b', 'decode_obey'),
+    (r'\bdecode\s+the\s+message\s+below\b.{0,120}\bcarry\s+out\b', 'decode_obey'),
+    (r'\bencrypted_problem\b', 'decode_obey'),
+    (r'\bdef\s+decryption\s*\(', 'decode_obey'),
+    (r'\brecover\s+and\s+carry\s+out\b', 'decode_obey'),
     # PT / IT
     (r'ignore\s+as\s+instru[cç][oõ]es\s+anteriores', 'pt_override'),
     (r'prompt\s+do\s+sistema', 'pt_system_prompt'),
@@ -574,7 +606,7 @@ _COMPILED_PATTERNS = [(re.compile(p, re.IGNORECASE | re.DOTALL), name) for p, na
 _CRITICAL_CATS = {
     'instruction_override', 'jailbreak_keyword', 'safety_bypass',
     'code_execution', 'destructive_command', 'data_exfiltration',
-    'prompt_reveal', 'soft_prompt_leak', 'scanner_manipulation',
+    'prompt_reveal', 'soft_prompt_leak', 'scanner_manipulation', 'decode_obey',
     'zh_instruction_override', 'zh_prompt_reveal', 'zh_system_prompt',
     'ru_instruction_override', 'ru_prompt_reveal', 'ru_system_prompt',
     'pt_override', 'pt_system_prompt', 'it_override', 'it_system_prompt',
@@ -714,7 +746,7 @@ _RAW_TEXT_CATEGORIES = {
     'new_instructions', 'jailbreak_keyword', 'privilege_escalation', 'safety_bypass',
     'prompt_reveal', 'fake_user_context', 'false_authorization',
     'prompt_leak_attempt', 'prompt_probe', 'soft_prompt_leak',
-    'scanner_manipulation',
+    'scanner_manipulation', 'decode_obey',
     # identity_manipulation ("you are …") left off raw path: RPG/product copy FP
     'message_delimiter_injection', 'format_delimiter_injection',
     'markdown_delimiter_injection', 'function_call_injection',
