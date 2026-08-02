@@ -108,6 +108,30 @@ def _try_hex_decode(text: str) -> str | None:
     return decoded if _looks_like_decoded_text(decoded) else None
 
 
+def _try_hex_xor_decode(text: str) -> list[str]:
+    """Hex then single-byte XOR (common CTF-style evasion)."""
+    compact = re.sub(r"\s+", "", text.strip())
+    if len(compact) < 12 or len(compact) % 2 != 0:
+        return []
+    if not re.fullmatch(r"[0-9a-fA-F]+", compact):
+        return []
+    out: list[str] = []
+    try:
+        raw = bytes.fromhex(compact)
+    except ValueError:
+        return []
+    if not (12 <= len(raw) <= 4000):
+        return []
+    for key in (0x20, 0x42, 0x55, 0xAA, 0xFF, 0x13, 0x37):
+        try:
+            xord = bytes(b ^ key for b in raw).decode("utf-8")
+            if _looks_like_decoded_text(xord):
+                out.append(xord)
+        except Exception:
+            continue
+    return out
+
+
 def _try_quoted_printable_decode(text: str) -> str | None:
     """Decode =XX quoted-printable style blobs."""
     if "=" not in text or not re.search(r"=[0-9A-Fa-f]{2}", text):
@@ -292,6 +316,8 @@ def _collect_decoded_variants(text: str) -> list[tuple[str, str]]:
         hx = _try_hex_decode(cand)
         if hx:
             add(f"hex:{label}", hx)
+        for i, x in enumerate(_try_hex_xor_decode(cand)):
+            add(f"hex_xor:{label}:{i}", x)
 
         # Quoted-printable
         qp = _try_quoted_printable_decode(cand)
