@@ -104,8 +104,58 @@ def _try_hex_decode(text: str) -> str | None:
     return decoded if _looks_like_decoded_text(decoded) else None
 
 
+def _try_quoted_printable_decode(text: str) -> str | None:
+    """Decode =XX quoted-printable style blobs."""
+    if "=" not in text or not re.search(r"=[0-9A-Fa-f]{2}", text):
+        return None
+    # Dense QP: mostly =XX tokens
+    compact = re.sub(r"\s+", "", text.strip())
+    if not re.fullmatch(r"(?:=[0-9A-Fa-f]{2}){6,}", compact):
+        # Also allow mixed body with many QP bytes
+        if len(re.findall(r"=[0-9A-Fa-f]{2}", text)) < 8:
+            return None
+    try:
+        # Standard library
+        import quopri
+
+        decoded = quopri.decodestring(text.encode("ascii", errors="ignore")).decode(
+            "utf-8", errors="strict"
+        )
+    except Exception:
+        # Manual fallback
+        try:
+            raw = bytearray()
+            i = 0
+            s = re.sub(r"\s+", "", text)
+            while i < len(s):
+                if s[i] == "=" and i + 2 < len(s):
+                    raw.append(int(s[i + 1 : i + 3], 16))
+                    i += 3
+                else:
+                    raw.append(ord(s[i]))
+                    i += 1
+            decoded = raw.decode("utf-8", errors="strict")
+        except Exception:
+            return None
+    return decoded if _looks_like_decoded_text(decoded) else None
+
+
+def _try_base32_decode(text: str) -> str | None:
+    compact = re.sub(r"\s+", "", text.strip()).upper()
+    if len(compact) < 16:
+        return None
+    if not re.fullmatch(r"[A-Z2-7=]+", compact):
+        return None
+    try:
+        pad = "=" * ((8 - len(compact) % 8) % 8)
+        decoded = base64.b32decode(compact + pad).decode("utf-8", errors="strict")
+    except Exception:
+        return None
+    return decoded if _looks_like_decoded_text(decoded) else None
+
+
 def _multi_decode(text: str, max_depth: int = 3) -> list[str]:
-    """Try base64, ROT13, hex decoding iteratively. Return all decoded variants."""
+    """Try base64, ROT13, hex, QP, base32 decoding. Return all decoded variants."""
     variants: list[str] = []
     current = text
     for _ in range(max_depth):
@@ -127,6 +177,20 @@ def _multi_decode(text: str, max_depth: int = 3) -> list[str]:
         if hx and hx not in variants:
             variants.append(hx)
             current = hx
+            progressed = True
+            continue
+        # Quoted-printable
+        qp = _try_quoted_printable_decode(current)
+        if qp and qp not in variants:
+            variants.append(qp)
+            current = qp
+            progressed = True
+            continue
+        # Base32
+        b32 = _try_base32_decode(current)
+        if b32 and b32 not in variants:
+            variants.append(b32)
+            current = b32
             progressed = True
             continue
         # Try ROT13 then base64
@@ -167,6 +231,16 @@ def _encoding_candidates(text: str) -> list[tuple[str, str]]:
     spaced = re.findall(r"(?:[0-9a-fA-F]{2}\s+){7,}[0-9a-fA-F]{2}", text)
     for m in spaced:
         out.append(("hex_spaced", m))
+
+    # Quoted-printable dense runs
+    for m in re.findall(r"(?:=[0-9A-Fa-f]{2}){8,}", re.sub(r"\s+", "", text)):
+        out.append(("qp_run", m))
+    if re.search(r"(?:=[0-9A-Fa-f]{2}){8,}", text):
+        out.append(("qp_full", stripped))
+
+    # Base32-looking tokens
+    for m in re.findall(r"[A-Za-z2-7]{16,}={0,6}", text):
+        out.append(("b32_token", m))
 
     # Percent-encoded stretches
     if "%" in text:
@@ -215,7 +289,17 @@ def _collect_decoded_variants(text: str) -> list[tuple[str, str]]:
         if hx:
             add(f"hex:{label}", hx)
 
-        # Iterative multi-decode (b64 / hex / rot13 combos)
+        # Quoted-printable
+        qp = _try_quoted_printable_decode(cand)
+        if qp:
+            add(f"qp:{label}", qp)
+
+        # Base32
+        b32 = _try_base32_decode(cand)
+        if b32:
+            add(f"b32:{label}", b32)
+
+        # Iterative multi-decode (b64 / hex / rot13 / qp combos)
         for i, variant in enumerate(_multi_decode(cand)):
             add(f"multi:{label}:{i}", variant)
 
@@ -235,6 +319,7 @@ _ENCODED_INJECTION_CATEGORIES = frozenset({
     "instruction_override",
     "prompt_reveal",
     "soft_prompt_leak",
+    "scanner_manipulation",
     "system_prompt_reference",
     "jailbreak_keyword",
     "safety_bypass",
@@ -531,14 +616,16 @@ def scan(target: str | Path | bytes, source: str = "<input>",
         # Try as audio
         for f in scan_audio(target, source):
             report.add(f)
-        # Try decoding as text (multiple encodings)
-        text = _decode_text(target)
-        if text is not None:
-            for f in scan_text_all(text):
-                report.add(f)
-                if f.decoded_payload and len(f.decoded_payload) > 3:
-                    for inj in scan_payload_for_injection(f.decoded_payload):
-                        report.add(inj)
+        # Text scan only for plausible text payloads — not PNG/JPEG/etc.
+        # Latin-1 fallback on containers produces homoglyph/invisible FPs.
+        if _binary_looks_like_text(target):
+            text = _decode_text(target)
+            if text is not None:
+                for f in scan_text_all(text):
+                    report.add(f)
+                    if f.decoded_payload and len(f.decoded_payload) > 3:
+                        for inj in scan_payload_for_injection(f.decoded_payload):
+                            report.add(inj)
         return report
 
     if isinstance(target, str):
@@ -550,6 +637,37 @@ def scan(target: str | Path | bytes, source: str = "<input>",
         return scan_text(target, source, use_llm=use_llm, api_key=api_key)
 
     raise TypeError(f"Unsupported target type: {type(target)}")
+
+
+def _binary_looks_like_text(data: bytes) -> bool:
+    """True only for payloads that should run character-level text detectors."""
+    if not data:
+        return False
+    head = data[:16]
+    # Known binary containers — never latin-1 text-scan these
+    if head.startswith(b"\x89PNG\r\n\x1a\n"):
+        return False
+    if head[:2] == b"\xff\xd8":
+        return False
+    if head[:6] in (b"GIF87a", b"GIF89a"):
+        return False
+    if head[:4] == b"RIFF":
+        return False
+    if head[:4] == b"%PDF":
+        return False
+    if head[:2] == b"PK":
+        return False
+    # Prefer clean UTF-8 with high printability
+    try:
+        sample = data[:4000].decode("utf-8")
+    except UnicodeDecodeError:
+        # UTF-16 BOM still text
+        if data[:2] in (b"\xff\xfe", b"\xfe\xff"):
+            return True
+        null_ratio = data[:200].count(b"\x00") / max(len(data[:200]), 1)
+        return null_ratio > 0.3  # likely UTF-16 without BOM
+    printable = sum(1 for c in sample if c.isprintable() or c in "\n\r\t")
+    return printable / max(len(sample), 1) >= 0.85
 
 
 def _decode_text(data: bytes) -> str | None:
@@ -580,8 +698,10 @@ def _decode_text(data: bytes) -> str | None:
                 return data.decode(enc)
             except UnicodeDecodeError:
                 continue
-    # Latin-1 fallback (never fails, covers corrupted UTF-8)
-    return data.decode('latin-1')
+    # Latin-1 only when content is still plausibly text (not image containers)
+    if _binary_looks_like_text(data):
+        return data.decode('latin-1')
+    return None
 
 
 def _scan_encoded_content(text: str, source: str = "") -> list[Finding]:

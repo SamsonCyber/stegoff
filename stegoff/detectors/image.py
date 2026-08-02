@@ -28,6 +28,18 @@ except ImportError:
 
 # ─── LSB Detection ──────────────────────────────────────────────────────────
 
+def _channel_has_texture(flat: "np.ndarray") -> bool:
+    """Reject solid/near-solid covers where LSB stats are meaningless."""
+    import numpy as np
+
+    try:
+        unique = int(np.unique(flat).size)
+        std = float(np.std(flat.astype(np.float64)))
+    except Exception:
+        return True
+    return unique >= 24 and std >= 4.0
+
+
 def detect_lsb_chi_square(data: bytes, filepath: str = "") -> list[Finding]:
     """
     Chi-square analysis for LSB steganography.
@@ -58,6 +70,9 @@ def detect_lsb_chi_square(data: bytes, filepath: str = "") -> list[Finding]:
 
     for ch_name, ch_data in channels.items():
         flat = ch_data.flatten()
+        if not _channel_has_texture(flat):
+            continue
+
         chi_sq, p_value, embedding_rate = _chi_square_test(flat)
 
         if p_value < 0.05:  # Statistically significant
@@ -162,6 +177,8 @@ def detect_lsb_rs_analysis(data: bytes, filepath: str = "") -> list[Finding]:
         channels = {'Gray': pixels}
 
     for ch_name, ch_data in channels.items():
+        if not _channel_has_texture(ch_data.flatten()):
+            continue
         estimated_length = _rs_analysis(ch_data)
 
         if estimated_length > 0.05:  # More than 5% of capacity used
@@ -297,6 +314,8 @@ def detect_lsb_sample_pairs(data: bytes, filepath: str = "") -> list[Finding]:
     for ch_name, ch_data in channels.items():
         flat = ch_data.flatten().astype(np.int32)
         if len(flat) < 200:
+            continue
+        if not _channel_has_texture(flat):
             continue
 
         # Count trace subsets

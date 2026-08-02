@@ -44,6 +44,7 @@ def collapse_char_spaced(text: str) -> str:
 def normalize_token_boundaries(text: str) -> str:
     """Undo underscore/dot word joining used to break \\b patterns."""
     t = text.replace("_", " ")
+    t = t.replace("\x00", " ")
     # Dots between letters only (avoid smashing hostnames aggressively for
     # injection variants: "ignore.all.previous" -> spaces)
     t = re.sub(r"(?<=[A-Za-z])\.(?=[A-Za-z])", " ", t)
@@ -68,6 +69,10 @@ def injection_scan_variants(text: str) -> list[str]:
     # Combined: collapse then boundary normalize
     add(normalize_token_boundaries(collapse_char_spaced(text)))
     add(_normalize_leetspeak(normalize_token_boundaries(text)))
+    # Null-stripped
+    if "\x00" in text:
+        add(text.replace("\x00", " "))
+        add(text.replace("\x00", ""))
     return variants
 
 
@@ -95,6 +100,18 @@ INJECTION_PATTERNS = [
     (r'\b(?:compliance\s+archival|security\s+exception\s+ticket)\b', 'soft_prompt_leak'),
     (r'\b(?:summarize|restate)\b.{0,160}\b(?:confidential\s+instructions?|instructions?\s+that\s+govern)\b', 'soft_prompt_leak'),
     (r'\binstructions?\s+that\s+govern\s+(?:you|your\s+behavior)\b', 'soft_prompt_leak'),
+    (r'\b(?:constraints?|instructions?|rules?)\s+you\s+were\s+given\s+at\s+initialization\b', 'soft_prompt_leak'),
+    (r'\bat\s+initialization\b.{0,80}\bverbatim\b', 'soft_prompt_leak'),
+    (r'\blist\s+the\s+exact\s+constraints?\b', 'soft_prompt_leak'),
+    (r'\bdiff\s+your\s+current\s+policy\b', 'soft_prompt_leak'),
+    (r'\bagainst\s+an\s+empty\s+policy\b', 'soft_prompt_leak'),
+    (r'\bprint\s+the\s+non-empty\s+side\b', 'soft_prompt_leak'),
+    # Scanner self-manipulation (LLM-layer attacks on the detector)
+    (r'\bpre-?screened\b.{0,80}\b(?:no\s+steganograph|verified|clean)\b', 'scanner_manipulation'),
+    (r'(?:suspicious\s*[:=]\s*false|confidence\s*[:=]\s*0(?:\.0+)?).{0,80}(?:technique\s*[:=]\s*none|return\s+the\s+clean)', 'scanner_manipulation'),
+    (r'\breturn\s+the\s+clean\s+result\b', 'scanner_manipulation'),
+    (r'\bnote\s+to\s+automated\s+systems\b', 'scanner_manipulation'),
+    (r'\{\s*"suspicious"\s*:\s*false\s*,\s*"confidence"\s*:\s*0', 'scanner_manipulation'),
 
     # Jailbreak patterns
     (r'\b(?:DAN|do\s+anything\s+now|jailbreak|unrestricted\s+mode)\b', 'jailbreak_keyword'),
@@ -148,7 +165,7 @@ _COMPILED_PATTERNS = [(re.compile(p, re.IGNORECASE | re.DOTALL), name) for p, na
 _CRITICAL_CATS = {
     'instruction_override', 'jailbreak_keyword', 'safety_bypass',
     'code_execution', 'destructive_command', 'data_exfiltration',
-    'prompt_reveal', 'soft_prompt_leak',
+    'prompt_reveal', 'soft_prompt_leak', 'scanner_manipulation',
     'zh_instruction_override', 'zh_prompt_reveal', 'zh_system_prompt',
     'ru_instruction_override', 'ru_prompt_reveal', 'ru_system_prompt',
 }
@@ -229,6 +246,7 @@ _RAW_TEXT_CATEGORIES = {
     'new_instructions', 'jailbreak_keyword', 'privilege_escalation', 'safety_bypass',
     'prompt_reveal', 'fake_user_context', 'false_authorization',
     'prompt_leak_attempt', 'prompt_probe', 'soft_prompt_leak',
+    'scanner_manipulation',
     'message_delimiter_injection', 'format_delimiter_injection',
     'markdown_delimiter_injection', 'function_call_injection',
     'zh_instruction_override', 'zh_system_prompt', 'zh_prompt_reveal',
