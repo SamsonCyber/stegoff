@@ -27,8 +27,8 @@ import inspect
 from typing import Callable
 
 from stegoff.orchestrator import scan_text
-from stegoff.cli import _strip_steg_chars
 from stegoff.report import ScanReport
+from stegoff.sanitizers.text import sanitize_text
 
 
 class StegDetected(Exception):
@@ -89,7 +89,7 @@ def steg_guard(
                 if on_detect == "raise":
                     raise StegDetected(report)
                 elif on_detect == "strip":
-                    bound.arguments[param_name] = _strip_steg_chars(value)
+                    bound.arguments[param_name] = sanitize_text(value)[0]
                 elif on_detect == "log":
                     import sys
                     print(
@@ -122,7 +122,7 @@ def steg_guard(
                 if on_detect == "raise":
                     raise StegDetected(report)
                 elif on_detect == "strip":
-                    bound.arguments[param_name] = _strip_steg_chars(value)
+                    bound.arguments[param_name] = sanitize_text(value)[0]
                 elif on_detect == "log":
                     import sys
                     print(
