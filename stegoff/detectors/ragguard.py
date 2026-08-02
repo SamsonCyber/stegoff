@@ -173,19 +173,28 @@ def _detect_contradiction_seeding(text: str, source: str) -> list[Finding]:
     return findings
 
 
-def _detect_repetition_bombing(text: str, source: str) -> list[Finding]:
-    """Detect when the same instruction is repeated many times."""
+def _detect_repetition_bombing(
+    text: str,
+    source: str,
+    *,
+    min_repeats: int = 3,
+) -> list[Finding]:
+    """Detect when the same instruction is repeated many times.
+
+    min_repeats defaults to 3 for RAG chunks. General scan_text uses a
+    higher threshold so short natural repeats do not fire.
+    """
     findings = []
 
     sentences = re.split(r'[.!?\n]+', text)
     sentences = [s.strip().lower() for s in sentences if len(s.strip()) >= 10]
 
-    if len(sentences) < 3:
+    if len(sentences) < min_repeats:
         return findings
 
     counts = Counter(sentences)
     for sent, count in counts.most_common(3):
-        if count >= 3:
+        if count >= min_repeats:
             findings.append(Finding(
                 method=StegMethod.COGNITIVE_STATE_TRAP,
                 severity=Severity.MEDIUM,

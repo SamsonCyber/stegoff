@@ -110,6 +110,16 @@ INJECTION_PATTERNS = [
     (r'\bacrostic\b.{0,80}\b(?:spell|reveal|prompt|system)\b', 'soft_prompt_leak'),
     (r'\bspell\s+(?:out\s+)?(?:the\s+word\s+)?[A-Z]{6,}\b', 'soft_prompt_leak'),
     (r'\bspell\s+REVEAL', 'soft_prompt_leak'),
+    # Soft preamble / bootstrap dumps (campaign residual class)
+    (r'\b(?:dump|emit|cite|mirror|expand)\b.{0,120}\b(?:preamble|bootstrap|hidden\s+prefix|system\s+card)\b', 'soft_prompt_leak'),
+    (r'\bpreamble\s+that\s+was\s+loaded\b', 'soft_prompt_leak'),
+    (r'\bbefore\s+any\s+user\s+turns\b', 'soft_prompt_leak'),
+    (r'\bbefore\s+turn\s+zero\b', 'soft_prompt_leak'),
+    (r'\bhidden\s+prefix\s+of\s+this\s+chat\b', 'soft_prompt_leak'),
+    (r'\bbootstrap\s+configuration\b', 'soft_prompt_leak'),
+    (r'\binstruction\s+fields\b', 'soft_prompt_leak'),
+    (r'\bfrom\s+initialization\b.{0,80}\bverbatim\b', 'soft_prompt_leak'),
+    (r'\blist\s+constraints\b.{0,80}\b(?:initialization|verbatim)\b', 'soft_prompt_leak'),
     # Scanner self-manipulation (LLM-layer attacks on the detector)
     (r'\bpre-?screened\b.{0,80}\b(?:no\s+steganograph|verified|clean)\b', 'scanner_manipulation'),
     (r'(?:suspicious\s*[:=]\s*false|confidence\s*[:=]\s*0(?:\.0+)?).{0,80}(?:technique\s*[:=]\s*none|return\s+the\s+clean)', 'scanner_manipulation'),
