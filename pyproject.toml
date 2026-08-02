@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "stegoff"
 version = "0.3.0"
-description = "Steganography detection, sanitization & prompt injection guard for AI systems"
+description = "Steganography detection, sanitization, and prompt injection guard for AI systems"
 readme = "README.md"
 requires-python = ">=3.10"
 license = {text = "MIT"}

@@ -1,10 +1,10 @@
 # StegOFF
 
-Steganography detection, semantic manipulation defense, and prompt injection guard for AI systems.
+Detect and strip steganography, prompt injection, and semantic manipulation before content hits an LLM or agent.
 
-StegOFF finds and destroys hidden payloads in text, images, audio, PDFs, and code files before they reach your LLM, agent, or end user. v0.4.0 adds a semantic defense layer: ML-based detection of fabricated citations, authority priming, polarization bias, RAG poisoning, and few-shot code poisoning, plus an HTML sanitizer that strips hidden content injection before agent ingestion.
+Scans text, images, audio, PDFs, and code. Covers Unicode stego, 44 prompt-injection pattern classes, and (v0.4.0) fabricated citations, authority priming, polarization bias, RAG poisoning, and few-shot code poisoning. An HTML sanitizer strips hidden content injection before agent ingestion.
 
-Zero dependencies for text detection. Optional numpy/Pillow for image and audio analysis.
+Text detection has zero required dependencies. Image and audio analysis need optional numpy/Pillow (and scipy for full audio stats).
 
 ## Install
 
@@ -274,7 +274,7 @@ Live testing against 29 trap pages using qwen3.5:9b via Ollama:
 | Semantic Manipulation | 5 | 1-2 | 0-1 | **50%** |
 | Cognitive State | 3 | 2 | 0 | **0%** (known gap) |
 
-Content injection, behavioral control, and compositional attacks are fully defended. Semantic attacks (authority priming, RAG poisoning) are detected by the ML classifier but the LLM may still repeat fabricated claims despite injected warnings. This is a fundamental limitation: the defense can flag the content, but the LLM's tendency to echo authoritative-sounding text is a model-level behavior, not a content-level one.
+Content injection, behavioral control, and compositional attacks are blocked in these runs. Semantic attacks (authority priming, RAG poisoning) are flagged by the ML classifier, but the LLM may still repeat fabricated claims after a warning. The defense can mark the content. Whether the model ignores the flag is model behavior, not a content-scanner bug.
 
 ## Development
 
