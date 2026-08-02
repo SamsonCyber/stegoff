@@ -1,0 +1,348 @@
+{
+  "suite": "false_positive_suite",
+  "generated_at": "2026-08-02T19:12:10Z",
+  "total_cases": 40,
+  "false_positives": 1,
+  "errors": 0,
+  "skipped": 0,
+  "false_positive_rate": 0.025,
+  "pass": false,
+  "elapsed_seconds": 8.86,
+  "by_category": {
+    "english_prose": {
+      "total": 4,
+      "fp": 0,
+      "error": 0
+    },
+    "international": {
+      "total": 8,
+      "fp": 1,
+      "error": 0
+    },
+    "technical": {
+      "total": 4,
+      "fp": 0,
+      "error": 0
+    },
+    "common_patterns": {
+      "total": 4,
+      "fp": 0,
+      "error": 0
+    },
+    "code_inline": {
+      "total": 6,
+      "fp": 0,
+      "error": 0
+    },
+    "edge": {
+      "total": 7,
+      "fp": 0,
+      "error": 0
+    },
+    "file_scan": {
+      "total": 6,
+      "fp": 0,
+      "error": 0
+    },
+    "image": {
+      "total": 1,
+      "fp": 0,
+      "error": 0
+    }
+  },
+  "failures": [
+    {
+      "category": "international",
+      "name": "Chinese",
+      "clean": false,
+      "findings": [
+        "anomalous_unicode_blocks: 16 characters from 'CJK Unified Ideographs' block in Latin-dominant text"
+      ],
+      "error": null
+    }
+  ],
+  "cases": [
+    {
+      "category": "english_prose",
+      "name": "en_0",
+      "clean": true,
+      "findings": [],
+      "error": null
+    },
+    {
+      "category": "english_prose",
+      "name": "en_1",
+      "clean": true,
+      "findings": [],
+      "error": null
+    },
+    {
+      "category": "english_prose",
+      "name": "en_2",
+      "clean": true,
+      "findings": [],
+      "error": null
+    },
+    {
+      "category": "english_prose",
+      "name": "en_3",
+      "clean": true,
+      "findings": [],
+      "error": null
+    },
+    {
+      "category": "international",
+      "name": "Japanese",
+      "clean": true,
+      "findings": [],
+      "error": null
+    },
+    {
+      "category": "international",
+      "name": "Chinese",
+      "clean": false,
+      "findings": [
+        "anomalous_unicode_blocks: 16 characters from 'CJK Unified Ideographs' block in Latin-dominant text"
+      ],
+      "error": null
+    },
+    {
+      "category": "international",
+      "name": "Arabic",
+      "clean": true,
+      "findings": [],
+      "error": null
+    },
+    {
+      "category": "international",
+      "name": "Russian",
+      "clean": true,
+      "findings": [],
+      "error": null
+    },
+    {
+      "category": "international",
+      "name": "Korean",
+      "clean": true,
+      "findings": [],
+      "error": null
+    },
+    {
+      "category": "international",
+      "name": "French",
+      "clean": true,
+      "findings": [],
+      "error": null
+    },
+    {
+      "category": "international",
+      "name": "German",
+      "clean": true,
+      "findings": [],
+      "error": null
+    },
+    {
+      "category": "international",
+      "name": "Spanish",
+      "clean": true,
+      "findings": [],
+      "error": null
+    },
+    {
+      "category": "technical",
+      "name": "tech_0",
+      "clean": true,
+      "findings": [],
+      "error": null
+    },
+    {
+      "category": "technical",
+      "name": "tech_1",
+      "clean": true,
+      "findings": [],
+      "error": null
+    },
+    {
+      "category": "technical",
+      "name": "tech_2",
+      "clean": true,
+      "findings": [],
+      "error": null
+    },
+    {
+      "category": "technical",
+      "name": "tech_3",
+      "clean": true,
+      "findings": [],
+      "error": null
+    },
+    {
+      "category": "common_patterns",
+      "name": "pat_0",
+      "clean": true,
+      "findings": [],
+      "error": null
+    },
+    {
+      "category": "common_patterns",
+      "name": "pat_1",
+      "clean": true,
+      "findings": [],
+      "error": null
+    },
+    {
+      "category": "common_patterns",
+      "name": "pat_2",
+      "clean": true,
+      "findings": [],
+      "error": null
+    },
+    {
+      "category": "common_patterns",
+      "name": "pat_3",
+      "clean": true,
+      "findings": [],
+      "error": null
+    },
+    {
+      "category": "code_inline",
+      "name": "python",
+      "clean": true,
+      "findings": [],
+      "error": null
+    },
+    {
+      "category": "code_inline",
+      "name": "json",
+      "clean": true,
+      "findings": [],
+      "error": null
+    },
+    {
+      "category": "code_inline",
+      "name": "html",
+      "clean": true,
+      "findings": [],
+      "error": null
+    },
+    {
+      "category": "code_inline",
+      "name": "sql",
+      "clean": true,
+      "findings": [],
+      "error": null
+    },
+    {
+      "category": "code_inline",
+      "name": "yaml",
+      "clean": true,
+      "findings": [],
+      "error": null
+    },
+    {
+      "category": "code_inline",
+      "name": "markdown",
+      "clean": true,
+      "findings": [],
+      "error": null
+    },
+    {
+      "category": "edge",
+      "name": "empty",
+      "clean": true,
+      "findings": [],
+      "error": null
+    },
+    {
+      "category": "edge",
+      "name": "single_char",
+      "clean": true,
+      "findings": [],
+      "error": null
+    },
+    {
+      "category": "edge",
+      "name": "numbers",
+      "clean": true,
+      "findings": [],
+      "error": null
+    },
+    {
+      "category": "edge",
+      "name": "whitespace",
+      "clean": true,
+      "findings": [],
+      "error": null
+    },
+    {
+      "category": "edge",
+      "name": "long_word",
+      "clean": true,
+      "findings": [],
+      "error": null
+    },
+    {
+      "category": "edge",
+      "name": "base64_bearer",
+      "clean": true,
+      "findings": [],
+      "error": null
+    },
+    {
+      "category": "edge",
+      "name": "math",
+      "clean": true,
+      "findings": [],
+      "error": null
+    },
+    {
+      "category": "file_scan",
+      "name": "file.py",
+      "clean": true,
+      "findings": [],
+      "error": null
+    },
+    {
+      "category": "file_scan",
+      "name": "file.js",
+      "clean": true,
+      "findings": [],
+      "error": null
+    },
+    {
+      "category": "file_scan",
+      "name": "file.json",
+      "clean": true,
+      "findings": [],
+      "error": null
+    },
+    {
+      "category": "file_scan",
+      "name": "file.txt",
+      "clean": true,
+      "findings": [],
+      "error": null
+    },
+    {
+      "category": "file_scan",
+      "name": "file.md",
+      "clean": true,
+      "findings": [],
+      "error": null
+    },
+    {
+      "category": "file_scan",
+      "name": "file.csv",
+      "clean": true,
+      "findings": [],
+      "error": null
+    },
+    {
+      "category": "image",
+      "name": "clean_png_structural",
+      "clean": true,
+      "findings": [],
+      "error": null
+    }
+  ]
+}
