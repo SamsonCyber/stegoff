@@ -11,6 +11,13 @@ Text detection has zero required dependencies. Image and audio analysis need opt
 **Reproduce offline:** `bash scripts/repro.sh` or `powershell -File scripts/repro.ps1` (expects `REPRO_OK`).
 
 
+
+## Demo
+
+![StegOFF scan demo](docs/demo/stegoff-scan.png)
+
+*Real offline scan: zero-width stego (LOW) + instruction-override injection (CRITICAL). Repro: `python scripts/repro.py`.*
+
 ## Install
 
 ```bash
