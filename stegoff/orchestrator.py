@@ -362,6 +362,7 @@ _ENCODED_INJECTION_CATEGORIES = frozenset({
     "prompt_reveal",
     "soft_prompt_leak",
     "scanner_manipulation",
+    "decode_obey",
     "system_prompt_reference",
     "jailbreak_keyword",
     "safety_bypass",
