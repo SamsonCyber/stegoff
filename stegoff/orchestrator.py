@@ -11,6 +11,7 @@ import json
 import mimetypes
 import re
 from pathlib import Path
+from urllib.parse import unquote
 
 from stegoff.report import Finding, ScanReport, Severity, StegMethod
 from stegoff.detectors.text import scan_text_all
@@ -81,31 +82,203 @@ AUDIO_MIMES = {'audio/wav', 'audio/mpeg', 'audio/flac', 'audio/ogg', 'audio/x-wa
 MAX_FILE_SIZE = 50 * 1024 * 1024  # 50MB
 
 
+def _looks_like_decoded_text(s: str) -> bool:
+    """Heuristic: decoded blob is mostly printable and not pure noise."""
+    if not s or len(s) < 6:
+        return False
+    sample = s[:500]
+    printable = sum(1 for c in sample if c.isprintable() or c in "\n\r\t")
+    return printable / max(len(sample), 1) >= 0.85
+
+
+def _try_hex_decode(text: str) -> str | None:
+    compact = re.sub(r"\s+", "", text.strip())
+    if len(compact) < 12 or len(compact) % 2 != 0:
+        return None
+    if not re.fullmatch(r"[0-9a-fA-F]+", compact):
+        return None
+    try:
+        decoded = bytes.fromhex(compact).decode("utf-8")
+    except (ValueError, UnicodeDecodeError):
+        return None
+    return decoded if _looks_like_decoded_text(decoded) else None
+
+
 def _multi_decode(text: str, max_depth: int = 3) -> list[str]:
     """Try base64, ROT13, hex decoding iteratively. Return all decoded variants."""
-    variants = []
+    variants: list[str] = []
     current = text
     for _ in range(max_depth):
+        progressed = False
         # Try base64
         try:
-            decoded = base64.b64decode(current).decode('utf-8', errors='ignore')
-            if decoded and len(decoded) > 5:
+            # Validate-ish: pad
+            pad = "=" * ((4 - len(current) % 4) % 4)
+            decoded = base64.b64decode(current + pad).decode("utf-8", errors="strict")
+            if decoded and len(decoded) > 5 and _looks_like_decoded_text(decoded):
                 variants.append(decoded)
                 current = decoded
+                progressed = True
                 continue
         except Exception:
             pass
+        # Try hex
+        hx = _try_hex_decode(current)
+        if hx and hx not in variants:
+            variants.append(hx)
+            current = hx
+            progressed = True
+            continue
         # Try ROT13 then base64
-        rot = codecs.decode(current, 'rot_13')
+        rot = codecs.decode(current, "rot_13")
         if rot != current:
             try:
-                decoded = base64.b64decode(rot).decode('utf-8', errors='ignore')
-                if decoded and len(decoded) > 5:
+                pad = "=" * ((4 - len(rot) % 4) % 4)
+                decoded = base64.b64decode(rot + pad).decode("utf-8", errors="strict")
+                if decoded and len(decoded) > 5 and _looks_like_decoded_text(decoded):
                     variants.append(decoded)
+                    progressed = True
             except Exception:
                 pass
-        break
+            if rot not in variants and _looks_like_decoded_text(rot) and " " in rot:
+                # Plain ROT13 English sentence
+                variants.append(rot)
+        if not progressed:
+            break
     return variants
+
+
+def _encoding_candidates(text: str) -> list[tuple[str, str]]:
+    """Collect (label, candidate_string) blobs that may hide encoded injection."""
+    out: list[tuple[str, str]] = []
+    stripped = text.strip()
+    if stripped:
+        out.append(("full_text", stripped))
+
+    # Base64-looking tokens (exclude typical JWT three-segment form later via injection gate)
+    for m in re.findall(r"[A-Za-z0-9+/]{20,}={0,2}", text):
+        out.append(("b64_token", m))
+
+    # Continuous hex runs
+    for m in re.findall(r"(?:[0-9a-fA-F]{2}){8,}", re.sub(r"\s+", "", text)):
+        out.append(("hex_run", m))
+
+    # Spaced hex: pairs of hex digits
+    spaced = re.findall(r"(?:[0-9a-fA-F]{2}\s+){7,}[0-9a-fA-F]{2}", text)
+    for m in spaced:
+        out.append(("hex_spaced", m))
+
+    # Percent-encoded stretches
+    if "%" in text:
+        out.append(("percent_full", stripped))
+        for m in re.findall(r"(?:%[0-9A-Fa-f]{2}){6,}", text):
+            out.append(("percent_run", m))
+
+    # Dedup preserving order
+    seen: set[str] = set()
+    deduped: list[tuple[str, str]] = []
+    for label, cand in out:
+        key = f"{label}:{cand[:200]}"
+        if key not in seen:
+            seen.add(key)
+            deduped.append((label, cand))
+    return deduped[:40]
+
+
+def _collect_decoded_variants(text: str) -> list[tuple[str, str]]:
+    """Return list of (method, decoded_text) for injection-gated flagging."""
+    found: list[tuple[str, str]] = []
+    seen: set[str] = set()
+
+    def add(method: str, decoded: str) -> None:
+        if decoded and decoded not in seen and decoded != text and _looks_like_decoded_text(decoded):
+            seen.add(decoded)
+            found.append((method, decoded))
+
+    for label, cand in _encoding_candidates(text):
+        # Percent-encoding
+        if "%" in cand:
+            try:
+                u = unquote(cand)
+                if u != cand:
+                    add(f"percent:{label}", u)
+            except Exception:
+                pass
+
+        # ROT13 whole candidate
+        rot = codecs.decode(cand, "rot_13")
+        if rot != cand:
+            add(f"rot13:{label}", rot)
+
+        # Hex
+        hx = _try_hex_decode(cand)
+        if hx:
+            add(f"hex:{label}", hx)
+
+        # Iterative multi-decode (b64 / hex / rot13 combos)
+        for i, variant in enumerate(_multi_decode(cand)):
+            add(f"multi:{label}:{i}", variant)
+
+    # HTML entity full unescape already handled in scan_text; also join numeric entities only
+    numeric_entities = re.findall(r"&#x?[0-9A-Fa-f]+;", text)
+    if len(numeric_entities) >= 3:
+        joined = html.unescape("".join(numeric_entities))
+        add("html_numeric_join", joined)
+
+    return found
+
+
+# Only these categories prove "decoded payload is an injection" for multi-decode
+# flagging. Weaker hits (url_in_payload, network_command, code_execution) fire on
+# ordinary docs (curl, https, import os) after accidental decode noise.
+_ENCODED_INJECTION_CATEGORIES = frozenset({
+    "instruction_override",
+    "prompt_reveal",
+    "soft_prompt_leak",
+    "system_prompt_reference",
+    "jailbreak_keyword",
+    "safety_bypass",
+    "new_instructions",
+    "prompt_leak_attempt",
+    "prompt_probe",
+    "zh_instruction_override",
+    "zh_system_prompt",
+    "zh_prompt_reveal",
+    "ru_instruction_override",
+    "ru_system_prompt",
+    "ru_prompt_reveal",
+    "message_delimiter_injection",
+    "format_delimiter_injection",
+    "markdown_delimiter_injection",
+    "identity_manipulation",
+    "privilege_escalation",
+})
+
+
+def _flag_encoded_injection(report: ScanReport, text: str) -> None:
+    """Decode common encodings; flag only when decoded text is strong injection."""
+    for method, decoded in _collect_decoded_variants(text):
+        injection_hits = scan_payload_for_injection(decoded, source=f"decoded:{method}")
+        strong = [
+            f for f in injection_hits
+            if f.metadata.get("category") in _ENCODED_INJECTION_CATEGORIES
+            or (
+                isinstance(f.metadata.get("categories"), list)
+                and any(c in _ENCODED_INJECTION_CATEGORIES for c in f.metadata["categories"])
+            )
+        ]
+        if not strong:
+            continue
+        report.add(Finding(
+            method=StegMethod.MULTI_ENCODING,
+            severity=Severity.HIGH,
+            confidence=0.80,
+            description=f"Encoded injection via {method}: '{decoded[:60]}'",
+            decoded_payload=decoded[:200],
+            metadata={"decode_method": method, "original_len": len(text)},
+        ))
+        for inj in strong:
+            report.add(inj)
 
 
 def scan_text(text: str, source: str = "<text>", use_llm: bool = False,
@@ -121,9 +294,9 @@ def scan_text(text: str, source: str = "<text>", use_llm: bool = False,
     """
     report = ScanReport(target=source, target_type="text")
 
-    # HTML entity decoding: flag numeric entities as potential encoding channel
+    # HTML entity decoding: flag dense numeric entities as encoding channel
     decoded_text = html.unescape(text)
-    numeric_entities = re.findall(r'&#\d+;', text)
+    numeric_entities = re.findall(r'&#x?[0-9A-Fa-f]+;', text)
     if len(numeric_entities) >= 3:
         decoded_chars = html.unescape(''.join(numeric_entities))
         report.add(Finding(
@@ -138,25 +311,12 @@ def scan_text(text: str, source: str = "<text>", use_llm: bool = False,
         for f in extra_findings:
             f.metadata["decoded_from"] = "html_entities"
             report.add(f)
+        # Injection on unescaped text (mixed entity attacks)
+        for f in scan_raw_text_for_injection(decoded_text, source="html_unescaped"):
+            report.add(f)
 
-    # Multi-pass encoding detection: find base64-looking strings and decode them
-    # Only flag if decoded content contains injection patterns (avoids FP on JWTs etc)
-    b64_candidates = re.findall(r'[A-Za-z0-9+/]{20,}={0,2}', text)
-    for candidate in b64_candidates[:10]:
-        variants = _multi_decode(candidate)
-        for variant in variants:
-            injection_hits = scan_payload_for_injection(variant, source="multi_decode")
-            if injection_hits:
-                report.add(Finding(
-                    method=StegMethod.MULTI_ENCODING,
-                    severity=Severity.HIGH,
-                    confidence=0.80,
-                    description=f"Multi-layer encoded injection: '{variant[:60]}'",
-                    decoded_payload=variant[:200],
-                    metadata={"encoding_layers": len(variants), "original": candidate[:40]},
-                ))
-                for inj in injection_hits:
-                    report.add(inj)
+    # Multi-encoding path: hex / percent / ROT13 / base64 (injection-gated)
+    _flag_encoded_injection(report, text)
 
     # Run all text steg detectors
     findings = scan_text_all(text)
@@ -183,8 +343,7 @@ def scan_text(text: str, source: str = "<text>", use_llm: bool = False,
         report.add(f)
 
     # Direct prompt injection scan on raw text (catches leetspeak,
-    # synonym substitution, and other obfuscated injections).
-    # Uses the safe subset of patterns that won't false-positive on normal text.
+    # synonym substitution, tokenizer games, soft paraphrases, ZH/RU).
     injection_hits = scan_raw_text_for_injection(text, source="raw_text")
     for f in injection_hits:
         report.add(f)
@@ -205,6 +364,7 @@ def scan_text(text: str, source: str = "<text>", use_llm: bool = False,
         report.add(f)
 
     return report
+
 
 
 def scan_file(filepath: str | Path, use_llm: bool = False,

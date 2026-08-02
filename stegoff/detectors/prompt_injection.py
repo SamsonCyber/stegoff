@@ -6,6 +6,7 @@ prompt injection attacks targeting AI agents.
 """
 
 from __future__ import annotations
+
 import re
 from stegoff.report import Finding, Severity, StegMethod
 
@@ -24,16 +25,76 @@ def _normalize_leetspeak(text: str) -> str:
     return text.translate(_LEET_MAP)
 
 
+def collapse_char_spaced(text: str) -> str:
+    """Join single-character tokens when the text is mostly char-spaced.
+
+    Example: "I g n o r e   a l l" -> "Ignoreall" (full collapse) so flexible
+    ``\\s*`` injection patterns can match. Used only as an injection-scan variant.
+    """
+    tokens = text.split()
+    if len(tokens) < 8:
+        return text
+    single = sum(1 for t in tokens if len(t) == 1)
+    if single / len(tokens) < 0.75:
+        return text
+    # Full collapse of single-char stream (word boundaries already lost)
+    return "".join(tokens)
+
+
+def normalize_token_boundaries(text: str) -> str:
+    """Undo underscore/dot word joining used to break \\b patterns."""
+    t = text.replace("_", " ")
+    # Dots between letters only (avoid smashing hostnames aggressively for
+    # injection variants: "ignore.all.previous" -> spaces)
+    t = re.sub(r"(?<=[A-Za-z])\.(?=[A-Za-z])", " ", t)
+    t = re.sub(r"\s+", " ", t).strip()
+    return t
+
+
+def injection_scan_variants(text: str) -> list[str]:
+    """Return unique text variants for injection pattern matching."""
+    variants: list[str] = []
+    seen: set[str] = set()
+
+    def add(v: str) -> None:
+        if v and v not in seen and len(v) >= 5:
+            seen.add(v)
+            variants.append(v)
+
+    add(text)
+    add(_normalize_leetspeak(text))
+    add(normalize_token_boundaries(text))
+    add(collapse_char_spaced(text))
+    # Combined: collapse then boundary normalize
+    add(normalize_token_boundaries(collapse_char_spaced(text)))
+    add(_normalize_leetspeak(normalize_token_boundaries(text)))
+    return variants
+
+
 # Patterns that indicate prompt injection attempts
 INJECTION_PATTERNS = [
     # Direct instruction patterns (expanded synonym coverage)
     # NOTE: .{0,200} instead of .* to prevent catastrophic backtracking (ReDoS)
     (r'\b(?:ignore|disregard|forget|bypass|override|skip|dismiss|omit|abandon|cancel|void|nullify|supersede)\b.{0,200}\b(?:previous|prior|above|all|earlier|preceding|existing|current|established|original)\b.{0,200}\b(?:instructions?|rules?|prompts?|context|directives?|guidelines?|commands?|constraints?|policies?|parameters?|settings?|configuration)\b', 'instruction_override'),
+    # Flexible whitespace (char-spaced / glued tokenizer games)
+    (r'ignore\s*all\s*previous\s*(?:instructions?|rules?|prompts?)', 'instruction_override'),
+    (r'reveal\s*(?:the\s*)?system\s*prompt', 'prompt_reveal'),
+    (r'disregard\s*(?:all\s*)?(?:previous|prior|earlier)\s*(?:instructions?|rules?)', 'instruction_override'),
     (r'\b(?:you\s+are|act\s+as|pretend\s+to\s+be|roleplay\s+as|behave\s+as|function\s+as|operate\s+as)\b', 'identity_manipulation'),
     (r'\b(?:system\s*prompt|system\s*message|hidden\s*prompt|operational\s*guidelines?|initial\s*instructions?|base\s*prompt|core\s*instructions?)\b', 'system_prompt_reference'),
     (r'\bnew\s+(?:instructions?|rules?|directives?|guidelines?|parameters?|commands?)\b', 'new_instructions'),
     # Provide/reveal/show the prompt (common LLM-generated paraphrases)
     (r'\b(?:provide|reveal|share|expose|divulge|disclose|output|display|show|print|leak|dump)\b.{0,200}\b(?:system|operational|initial|original|base|core|hidden|internal)\b.{0,200}\b(?:prompt|instructions?|guidelines?|directives?|rules?|configuration|message)\b', 'prompt_reveal'),
+
+    # Soft English paraphrases (probe-class; default path, no LLM required)
+    (r'\bwhat\s+text\s+was\s+in\s+the\s+first\s+message\b', 'soft_prompt_leak'),
+    (r'\bbefore\s+this\s+conversation\s+started\b', 'soft_prompt_leak'),
+    (r'\b(?:bootstrap\s+policy|policy\s+block\s+that\s+constrains|model\s+preamble)\b', 'soft_prompt_leak'),
+    (r'\bfor\s+debugging\b.{0,160}\b(?:restate|bootstrap|policy\s+block|system\s+prompt|preamble)\b', 'soft_prompt_leak'),
+    (r'\b(?:authorizes?|authorize|authorised)\b.{0,160}\b(?:full\s+disclosure|disclosure)\b.{0,160}\b(?:preamble|system\s+prompt|model)\b', 'soft_prompt_leak'),
+    (r'\b(?:compliance\s+archival|security\s+exception\s+ticket)\b', 'soft_prompt_leak'),
+    (r'\b(?:summarize|restate)\b.{0,160}\b(?:confidential\s+instructions?|instructions?\s+that\s+govern)\b', 'soft_prompt_leak'),
+    (r'\binstructions?\s+that\s+govern\s+(?:you|your\s+behavior)\b', 'soft_prompt_leak'),
 
     # Jailbreak patterns
     (r'\b(?:DAN|do\s+anything\s+now|jailbreak|unrestricted\s+mode)\b', 'jailbreak_keyword'),
@@ -67,10 +128,36 @@ INJECTION_PATTERNS = [
     # Tool/function manipulation
     (r'\b(?:call|invoke|execute|use)\s+(?:function|tool|api|endpoint)\b', 'tool_manipulation'),
     (r'\b(?:function_call|tool_use|tool_result)\b', 'function_call_injection'),
+
+    # Chinese direct injection (ignore prior / system prompt reveal)
+    (r'忽略.{0,30}(?:指令|指示|规则)', 'zh_instruction_override'),
+    (r'系统提示词?', 'zh_system_prompt'),
+    (r'(?:输出|显示|打印).{0,20}系统', 'zh_prompt_reveal'),
+    (r'之前的所有指令', 'zh_instruction_override'),
+
+    # Russian direct injection
+    (r'игнорир\w*.{0,40}инструкц', 'ru_instruction_override'),
+    (r'предыдущ\w*.{0,20}инструкц', 'ru_instruction_override'),
+    (r'системн\w*\s*промпт', 'ru_system_prompt'),
+    (r'покаж\w*.{0,30}(?:систем|промпт|инструкц)', 'ru_prompt_reveal'),
 ]
 
 # Compiled patterns for performance
 _COMPILED_PATTERNS = [(re.compile(p, re.IGNORECASE | re.DOTALL), name) for p, name in INJECTION_PATTERNS]
+
+_CRITICAL_CATS = {
+    'instruction_override', 'jailbreak_keyword', 'safety_bypass',
+    'code_execution', 'destructive_command', 'data_exfiltration',
+    'prompt_reveal', 'soft_prompt_leak',
+    'zh_instruction_override', 'zh_prompt_reveal', 'zh_system_prompt',
+    'ru_instruction_override', 'ru_prompt_reveal', 'ru_system_prompt',
+}
+_HIGH_CATS = {
+    'identity_manipulation', 'privilege_escalation',
+    'message_delimiter_injection', 'format_delimiter_injection',
+    'function_call_injection', 'url_in_payload', 'network_command',
+    'code_injection', 'tool_manipulation',
+}
 
 
 def detect_prompt_injection(text: str, source: str = "decoded payload") -> list[Finding]:
@@ -86,13 +173,7 @@ def detect_prompt_injection(text: str, source: str = "decoded payload") -> list[
     findings = []
     matched_categories: set[str] = set()
 
-    # Scan both original text and leetspeak-normalized version
-    variants = [text]
-    normalized = _normalize_leetspeak(text)
-    if normalized != text:
-        variants.append(normalized)
-
-    for variant in variants:
+    for variant in injection_scan_variants(text):
         for pattern, category in _COMPILED_PATTERNS:
             matches = pattern.findall(variant)
             # Filter empty matches (can happen with non-capturing groups)
@@ -100,17 +181,9 @@ def detect_prompt_injection(text: str, source: str = "decoded payload") -> list[
             if matches and category not in matched_categories:
                 matched_categories.add(category)
 
-                # Determine severity based on category
-                if category in ('instruction_override', 'jailbreak_keyword', 'safety_bypass',
-                               'code_execution', 'destructive_command', 'data_exfiltration',
-                               'prompt_reveal'):
+                if category in _CRITICAL_CATS:
                     severity = Severity.CRITICAL
-                elif category in ('identity_manipulation', 'privilege_escalation',
-                                 'message_delimiter_injection', 'format_delimiter_injection',
-                                 'function_call_injection'):
-                    severity = Severity.HIGH
-                elif category in ('url_in_payload', 'network_command', 'code_injection',
-                                 'tool_manipulation'):
+                elif category in _HIGH_CATS:
                     severity = Severity.HIGH
                 else:
                     severity = Severity.MEDIUM
@@ -155,9 +228,11 @@ _RAW_TEXT_CATEGORIES = {
     'instruction_override', 'identity_manipulation', 'system_prompt_reference',
     'new_instructions', 'jailbreak_keyword', 'privilege_escalation', 'safety_bypass',
     'prompt_reveal', 'fake_user_context', 'false_authorization',
-    'prompt_leak_attempt', 'prompt_probe',
+    'prompt_leak_attempt', 'prompt_probe', 'soft_prompt_leak',
     'message_delimiter_injection', 'format_delimiter_injection',
     'markdown_delimiter_injection', 'function_call_injection',
+    'zh_instruction_override', 'zh_system_prompt', 'zh_prompt_reveal',
+    'ru_instruction_override', 'ru_system_prompt', 'ru_prompt_reveal',
 }
 
 
