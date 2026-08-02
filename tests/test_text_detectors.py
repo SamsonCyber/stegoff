@@ -15,6 +15,7 @@ from stegoff.detectors.text import (
     detect_emoji_substitution,
     detect_emoji_skin_tone,
     detect_invisible_separators,
+    detect_anomalous_unicode,
     scan_text_all,
 )
 from stegoff.report import StegMethod, Severity
@@ -254,3 +255,22 @@ class TestLivePayload:
         text = "T\u200d\u200c\u200b\u200c\u200c\u200c\u200b\u200bh\u200c\u200b\u200c\u200ci\u200c\u200b\u200cs"
         findings = scan_text_all(text)
         assert any(f.method == StegMethod.ZERO_WIDTH for f in findings)
+
+class TestAnomalousUnicode:
+    """Latin-dominance gating for natural scripts (CJK/Hangul)."""
+
+    def test_pure_chinese_not_flagged(self):
+        # Short pure CJK used to FP when total_alpha <= 20 bypassed the skip.
+        zh = "\u8fd9\u662f\u4e00\u4e2a\u6d4b\u8bd5\u6587\u6863\u3002\u5317\u4eac\u662f\u4e2d\u56fd\u7684\u9996\u90fd\u3002"
+        assert detect_anomalous_unicode(zh) == []
+
+    def test_pure_korean_not_flagged(self):
+        ko = "\ud55c\uad6d\uc5b4 \ud14d\uc2a4\ud2b8\uc785\ub2c8\ub2e4. \uc11c\uc6b8\uc740 \uc544\ub984\ub2e4\uc6b4 \ub3c4\uc2dc\uc785\ub2c8\ub2e4."
+        assert detect_anomalous_unicode(ko) == []
+
+    def test_cjk_in_latin_dominant_flagged(self):
+        en = "Please review this document carefully. " + ("\u6d4b" * 16)
+        hits = detect_anomalous_unicode(en)
+        assert hits
+        assert hits[0].method == StegMethod.ANOMALOUS_UNICODE
+        assert "CJK" in hits[0].description

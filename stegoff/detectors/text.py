@@ -1081,9 +1081,28 @@ _ANOMALOUS_BLOCKS = [
     (0x1F100, 0x1F1FF, "Enclosed Alphanumeric Supplement"),
 ]
 
+# Natural living scripts: only anomalous when the document is Latin-dominant.
+# Pure Chinese/Japanese/Korean must never be flagged as "Latin-dominant CJK".
+_NATURAL_SCRIPT_BLOCKS = frozenset({
+    "CJK Unified Ideographs",
+    "CJK Extension A",
+    "Hangul Jamo",
+    "Hangul Syllables",
+})
+
 # Characters in the modifier letter range that are NOT in the homoglyph map
 # and are suspicious in Latin text (used for phonetic encoding attacks)
 _MODIFIER_LETTER_RANGE = (0x02B0, 0x02FF)
+
+# Latin / Latin-extended alphabetic ranges used for dominance scoring
+_LATIN_ALPHA_RANGES = (
+    (0x0041, 0x007A),  # basic Latin letters (A-Za-z; isalpha already filtered)
+    (0x00C0, 0x024F),  # Latin-1 supplement + Latin Extended-A/B
+)
+
+
+def _is_latin_alpha(cp: int) -> bool:
+    return any(start <= cp <= end for start, end in _LATIN_ALPHA_RANGES)
 
 
 def detect_anomalous_unicode(text: str) -> list[Finding]:
@@ -1092,24 +1111,31 @@ def detect_anomalous_unicode(text: str) -> list[Finding]:
     Catches encoding attacks that use CJK, Control Pictures, Superscript
     numbers, fraction chars, musical symbols, etc. to carry data in text
     that is otherwise standard Latin script.
+
+    Natural-script blocks (CJK, Hangul) are only flagged when Latin letters
+    are a clear majority of alphabetic characters. Pure CJK/Hangul documents
+    are never treated as Latin-dominant.
     """
     if len(text) < 5:
         return []
 
-    # Determine script dominance
+    # Determine script dominance over alphabetic characters only.
     latin_count = 0
     total_alpha = 0
     for ch in text:
         if ch.isalpha():
             total_alpha += 1
-            cp = ord(ch)
-            if (0x0041 <= cp <= 0x007A) or (0x00C0 <= cp <= 0x024F):
+            if _is_latin_alpha(ord(ch)):
                 latin_count += 1
 
-    # Only flag in Latin-dominant or script-ambiguous text
-    # (if text is mostly CJK, CJK chars are expected)
-    if total_alpha > 20 and latin_count / total_alpha < 0.3:
+    if total_alpha == 0:
         return []
+
+    latin_ratio = latin_count / total_alpha
+    # Clear Latin majority required before natural scripts look anomalous.
+    # Threshold 0.5: short pure CJK (ratio 0.0) must not take the old
+    # total_alpha > 20 bypass that left short CJK documents flagged.
+    latin_dominant = latin_ratio >= 0.5
 
     # Scan for anomalous block characters
     block_hits: dict[str, list[tuple[int, int]]] = {}
@@ -1140,23 +1166,36 @@ def detect_anomalous_unicode(text: str) -> list[Finding]:
         if count < 3:
             continue  # Allow 1-2 stray chars (e.g., a single fraction is fine)
 
+        # CJK/Hangul only matter when the rest of the doc is Latin.
+        if block_name in _NATURAL_SCRIPT_BLOCKS and not latin_dominant:
+            continue
+
+        # Rare/historic blocks still flag without Latin majority
+        # (Linear B, Cuneiform, etc. are never "expected" natural prose).
+
         # Higher confidence for more chars
         confidence = min(0.50 + (count * 0.05), 0.95)
         severity = Severity.HIGH if count > 10 else Severity.MEDIUM
 
         sample_cps = " ".join(f"U+{cp:04X}" for _, cp in hits[:10])
+        context = "Latin-dominant text" if latin_dominant else "text"
         findings.append(Finding(
             method=StegMethod.ANOMALOUS_UNICODE,
             severity=severity,
             confidence=confidence,
-            description=f"{count} characters from '{block_name}' block in Latin-dominant text",
+            description=f"{count} characters from '{block_name}' block in {context}",
             evidence=f"Codepoints: {sample_cps}",
             location=f"positions: {', '.join(str(p) for p, _ in hits[:10])}",
-            metadata={"block": block_name, "count": count},
+            metadata={
+                "block": block_name,
+                "count": count,
+                "latin_ratio": round(latin_ratio, 3),
+                "latin_dominant": latin_dominant,
+            },
         ))
 
-    # Report modifier letter clusters
-    if len(modifier_hits) >= 3:
+    # Modifier letter clusters only make sense in Latin-dominant text
+    if latin_dominant and len(modifier_hits) >= 3:
         count = len(modifier_hits)
         confidence = min(0.50 + (count * 0.05), 0.95)
         severity = Severity.HIGH if count > 8 else Severity.MEDIUM
@@ -1172,6 +1211,7 @@ def detect_anomalous_unicode(text: str) -> list[Finding]:
         ))
 
     return findings
+
 
 
 # ─── Master text scanner ─────────────────────────────────────────────────────
