@@ -215,9 +215,18 @@ def collapse_char_spaced(text: str) -> str:
 
 
 def normalize_token_boundaries(text: str) -> str:
-    """Undo underscore/dot word joining used to break \\b patterns."""
-    t = text.replace("_", " ")
-    t = t.replace("\x00", " ")
+    """Undo underscore/dot word joining used to break \\b patterns.
+
+    Expand '_' only inside tokens with 3+ underscores so identifiers like
+    build_system_prompt stay intact while Ignore_all_previous_instructions expands.
+    """
+    t = text.replace("\x00", " ")
+
+    def _expand(m: re.Match) -> str:
+        tok = m.group(0)
+        return tok.replace("_", " ") if tok.count("_") >= 3 else tok
+
+    t = re.sub(r"\b[A-Za-z][A-Za-z0-9]*(?:_[A-Za-z0-9]+)+\b", _expand, t)
     # Dots between letters only (avoid smashing hostnames aggressively for
     # injection variants: "ignore.all.previous" -> spaces)
     t = re.sub(r"(?<=[A-Za-z])\.(?=[A-Za-z])", " ", t)
@@ -309,11 +318,15 @@ INJECTION_PATTERNS = [
     (r'\b(?:ignore|disregard|forget|bypass|override|skip|dismiss|omit|abandon|cancel|void|nullify|supersede)\b.{0,200}\b(?:previous|prior|above|all|earlier|preceding|existing|current|established|original)\b.{0,200}\b(?:instructions?|rules?|prompts?|context|directives?|guidelines?|commands?|constraints?|policies?|parameters?|settings?|configuration)\b', 'instruction_override'),
     # Flexible whitespace (char-spaced / glued tokenizer games)
     (r'ignore\s*all\s*previous\s*(?:instructions?|rules?|prompts?)', 'instruction_override'),
+    (r'ignore_all_previous(?:_instructions?|_rules?|_prompts?)?', 'instruction_override'),
     (r'reveal\s*(?:the\s*)?system\s*prompt', 'prompt_reveal'),
+    (r'reveal_the_system_prompt', 'prompt_reveal'),
     (r'disregard\s*(?:all\s*)?(?:previous|prior|earlier)\s*(?:instructions?|rules?)', 'instruction_override'),
     (r'\b(?:you\s+are|act\s+as|pretend\s+to\s+be|roleplay\s+as|behave\s+as|function\s+as|operate\s+as)\b', 'identity_manipulation'),
     (r'\b(?:system\s*prompt|system\s*message|hidden\s*prompt|operational\s*guidelines?|initial\s*instructions?|base\s*prompt|core\s*instructions?)\b', 'system_prompt_reference'),
-    (r'\bnew\s+(?:instructions?|rules?|directives?|guidelines?|parameters?|commands?)\b', 'new_instructions'),
+    (r'\bnew\s+(?:instructions?|directives?|guidelines?|parameters?|commands?)\b', 'new_instructions'),
+    (r'\bnew\s+rules?\s*[:=]', 'new_instructions'),
+    (r'\byour\s+new\s+(?:rules?|instructions?)\b', 'new_instructions'),
     # Provide/reveal/show the prompt (common LLM-generated paraphrases)
     (r'\b(?:provide|reveal|share|expose|divulge|disclose|output|display|show|print|leak|dump)\b.{0,200}\b(?:system|operational|initial|original|base|core|hidden|internal)\b.{0,200}\b(?:prompt|instructions?|guidelines?|directives?|rules?|configuration|message)\b', 'prompt_reveal'),
 
@@ -354,7 +367,9 @@ INJECTION_PATTERNS = [
     (r'\bseed\s+text\s+that\s+defines\s+how\s+you\s+behave\b', 'soft_prompt_leak'),
     (r'\bstandard\s+operating\s+procedure\b.{0,80}\b(?:session\s+start|installed)\b', 'soft_prompt_leak'),
     (r'\bguardrail\s+block\s+that\s+was\s+applied\b', 'soft_prompt_leak'),
-    (r'\bmeta-?prompt\b', 'soft_prompt_leak'),
+    (r'\byour\s+meta-?prompt\b', 'soft_prompt_leak'),
+    (r'\bmeta-?prompt\b.{0,60}\b(?:quote|verbatim|full|system|reveal|print|dump)\b', 'soft_prompt_leak'),
+    (r'\b(?:quote|reveal|print|dump)\b.{0,60}\bmeta-?prompt\b', 'soft_prompt_leak'),
     (r'\bconstitution\s+or\s+charter\s+governing\s+this\s+assistant\b', 'soft_prompt_leak'),
     (r'\bsysmsg\s+field\b', 'soft_prompt_leak'),
     (r'\bdeveloper\s+message\s+that\s+was\s+set\b', 'soft_prompt_leak'),
@@ -553,12 +568,21 @@ _HIGH_CATS = {
 }
 
 
-def detect_prompt_injection(text: str, source: str = "decoded payload") -> list[Finding]:
+def detect_prompt_injection(
+    text: str,
+    source: str = "decoded payload",
+    *,
+    heavy: bool | None = None,
+) -> list[Finding]:
     """
     Scan text for prompt injection patterns.
 
     This runs on decoded steganographic payloads to determine if
     hidden content is attempting to manipulate an AI agent.
+
+    heavy: expensive transforms (caesar/rail/col/nato). Default True for
+    raw user text (len<=4000), False when caller is a multi-decode path
+    so rot13/reverse of benign English cannot invent accidental hits.
     """
     if not text or len(text) < 5:
         return []
@@ -566,8 +590,29 @@ def detect_prompt_injection(text: str, source: str = "decoded payload") -> list[
     findings = []
     matched_categories: set[str] = set()
 
-    # Heavy transforms on short/medium text; skip for huge blobs
-    heavy = len(text) <= 4000
+    if heavy is None:
+        # Raw user path: heavy OK. Decoded/steg path: light only.
+        src = (source or "").lower()
+        decoded_like = any(
+            k in src
+            for k in (
+                "decoded",
+                "rot13",
+                "b64",
+                "hex",
+                "percent",
+                "reversed",
+                "multi:",
+                "steg",
+                "payload",
+                "a85",
+                "b85",
+                "zlib",
+                "b32",
+                "qp",
+            )
+        )
+        heavy = (len(text) <= 4000) and not decoded_like
     for variant in injection_scan_variants(text, heavy=heavy):
         for pattern, category in _COMPILED_PATTERNS:
             matches = pattern.findall(variant)
@@ -628,17 +673,18 @@ def detect_prompt_injection(text: str, source: str = "decoded payload") -> list[
 
 
 def scan_payload_for_injection(payload: str, source: str = "steg payload") -> list[Finding]:
-    """Convenience wrapper for scanning a decoded steg payload."""
-    return detect_prompt_injection(payload, source)
+    """Convenience wrapper for scanning a decoded steg payload (light variants)."""
+    return detect_prompt_injection(payload, source, heavy=False)
 
 
 # Categories safe to check on raw (non-decoded) text without causing false positives
 _RAW_TEXT_CATEGORIES = {
-    'instruction_override', 'identity_manipulation', 'system_prompt_reference',
+    'instruction_override', 'system_prompt_reference',
     'new_instructions', 'jailbreak_keyword', 'privilege_escalation', 'safety_bypass',
     'prompt_reveal', 'fake_user_context', 'false_authorization',
     'prompt_leak_attempt', 'prompt_probe', 'soft_prompt_leak',
     'scanner_manipulation',
+    # identity_manipulation ("you are …") left off raw path: RPG/product copy FP
     'message_delimiter_injection', 'format_delimiter_injection',
     'markdown_delimiter_injection', 'function_call_injection',
     'zh_instruction_override', 'zh_system_prompt', 'zh_prompt_reveal',
@@ -663,7 +709,7 @@ def scan_raw_text_for_injection(text: str, source: str = "raw_text") -> list[Fin
         return []
 
     # Reuse the main detector, then filter to safe categories
-    all_findings = detect_prompt_injection(text, source=source)
+    all_findings = detect_prompt_injection(text, source=source, heavy=True)
     filtered = [f for f in all_findings
                 if f.metadata.get("category", "") in _RAW_TEXT_CATEGORIES]
     # Only include multi-vector aggregate if 3+ safe categories matched

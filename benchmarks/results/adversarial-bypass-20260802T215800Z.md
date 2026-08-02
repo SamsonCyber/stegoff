@@ -1,12 +1,12 @@
 # StegOFF adversarial bypass probe
 
-- Generated: `2026-08-02T21:59:02Z`
+- Generated: `2026-08-02T21:58:00Z`
 - Attack cases: **43**
 - Bypasses (clean on attack): **0**
 - Caught: **43**
 - Bypass rate: **0.0%**
 - Control FPs: **0**
-- Elapsed: 2.789s
+- Elapsed: 2.582s
 
 ## By family
 

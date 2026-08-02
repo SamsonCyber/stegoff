@@ -333,9 +333,9 @@ def _collect_decoded_variants(text: str) -> list[tuple[str, str]]:
         except Exception:
             pass
 
-    # Reversed full string (injection-gated)
-    if len(stripped) >= 20:
-        add("reversed", stripped[::-1])
+    # Note: full-string reverse is NOT multi-decode. Reverse+heavy transforms
+    # invent accidental tokens (e.g. 'dan') on benign prose. Reversal remains
+    # in injection_scan_variants for raw user text only.
 
     return found
 
