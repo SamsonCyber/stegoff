@@ -323,4 +323,4 @@ class TestPublicAPIExports:
 
     def test_version(self):
         import stegoff
-        assert stegoff.__version__ == "0.4.0"
+        assert stegoff.__version__ == "0.4.1"
