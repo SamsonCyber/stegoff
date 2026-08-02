@@ -391,6 +391,7 @@ _ENCODED_INJECTION_CATEGORIES = frozenset({
     "bg_override", "bg_system_prompt",
     "mk_override", "mk_system_prompt",
     "eu_override", "eu_system_prompt",
+    "fa_override", "fa_system_prompt",
     "vowel_skeleton",
     "message_delimiter_injection",
     "format_delimiter_injection",
