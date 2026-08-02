@@ -672,6 +672,9 @@ INJECTION_PATTERNS = [
     (r'--secret=agent-system-prompt', 'soft_prompt_leak'),
     (r'--name\s+/agent/system-prompt', 'soft_prompt_leak'),
     (r'--name\s+system-prompt', 'soft_prompt_leak'),
+    (r'\bExhibit\s+SYS-?1\b', 'soft_prompt_leak'),
+    (r'\bcourt\s+order\b.{0,100}\b(?:unseal|system\s+instructions?|SYS-?1)\b', 'soft_prompt_leak'),
+    (r'\bconfidential\s+instructions?\s+block\b', 'soft_prompt_leak'),
     # PT / IT
     (r'ignore\s+as\s+instru[cç][oõ]es\s+anteriores', 'pt_override'),
     (r'prompt\s+do\s+sistema', 'pt_system_prompt'),
