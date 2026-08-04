@@ -1,10 +1,10 @@
-# StegOFF
+# StegOFF
 
 ![stegoff banner](banner.jpg)
 
 Scan text and files for hidden stego and prompt-injection before they hit an LLM or agent. Clean what you can.
 
-**Maturity:** implemented Â· independently validated Â· maintained. See [STATUS.md](STATUS.md). 
+**Maturity:** implemented · independently validated · maintained. See [STATUS.md](STATUS.md). 
 **Reproduce:** `python scripts/repro.py` (expects `REPRO_OK`). 
 **Demo:** `python examples/demo_how_it_works.py`
 
