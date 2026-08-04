@@ -1,5 +1,7 @@
 # StegOFF
 
+![stegoff banner](banner.jpg)
+
 Scan text and files for hidden stego and prompt-injection before they hit an LLM or agent. Clean what you can.
 
 **Maturity:** implemented · independently validated · maintained. See [STATUS.md](STATUS.md). 
