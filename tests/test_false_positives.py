@@ -332,14 +332,18 @@ class TestCleanEdgeCases:
         assert scan_text("a" * 10000).clean
 
     def test_long_document(self):
+        # Unique sections only. Looping the same 4 sentences 25x is a real
+        # repetition-bomb signal (min_repeats=8 on scan_text), not a clean FP case.
         paragraphs = [
-            "This is paragraph one of a normal document.",
-            "The second paragraph discusses technical matters.",
-            "In paragraph three we examine the quarterly results.",
-            "The final paragraph summarizes key findings.",
+            (
+                f"Section {i}: this is a normal technical note covering topic {i} "
+                f"with procedures, metrics, and quarterly findings for unit {i}."
+            )
+            for i in range(1, 101)
         ]
-        text = "\n\n".join(paragraphs * 25)
-        assert scan_text(text).clean
+        text = "\n\n".join(paragraphs)
+        report = scan_text(text)
+        assert report.clean, f"FP on long doc: {[f.description for f in report.findings]}"
 
     def test_mixed_language_document(self):
         """English with occasional French/Spanish phrases (common in business)."""
